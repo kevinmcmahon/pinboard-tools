@@ -38,5 +38,3 @@ def parse_boolean(value: str | bool | int) -> bool:
 def format_boolean_for_pinboard(value: bool) -> str:
     """Convert Python bool to Pinboard format ('yes'/'no')"""
     return "yes" if value else "no"
-
-

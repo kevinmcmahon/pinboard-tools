@@ -149,18 +149,18 @@ class TestDatabase:
         tags = ["python", "programming", "web", "database", "api"]
 
         # Batch insert all tags
-        tag_params = [(tag,) for tag in tags]
+        tag_params: list[tuple[object, ...]] = [(tag,) for tag in tags]
         session.executemany("INSERT OR IGNORE INTO tags (name) VALUES (?)", tag_params)
 
         # Get all tag IDs in a single query
         placeholders = ",".join("?" * len(tags))
         cursor = session.execute(
-            f"SELECT id, name FROM tags WHERE name IN ({placeholders})", tags
+            f"SELECT id, name FROM tags WHERE name IN ({placeholders})", tuple(tags)
         )
         tag_map = {row["name"]: row["id"] for row in cursor.fetchall()}
 
         # Batch insert bookmark-tag relationships
-        bookmark_tag_params = [
+        bookmark_tag_params: list[tuple[object, ...]] = [
             (bookmark_id, tag_map[tag]) for tag in tags if tag in tag_map
         ]
         session.executemany(
