@@ -24,9 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Database initialization now loads schema from external `schema.sql` file instead of embedded string
 - All exceptions now use proper exception chaining with `from e`
 - Improved code formatting to comply with ruff and mypy standards
-- **BREAKING**: Replaced generic model classes with strongly-typed dataclasses for `Bookmark`, `Tag`, `BookmarkTag`, and `TagMerge`
+- Replaced generic model classes with strongly-typed dataclasses for `Bookmark`, `Tag`, `BookmarkTag`, and `TagMerge`
 - Added TypedDict definitions (`BookmarkRow`, `TagRow`, etc.) for type-safe database query results
 - Added helper functions to convert between database rows and dataclass instances
+- Removed non-idiomatic datetime utility aliases (`parse_datetime`, `format_datetime`) - use explicit `parse_pinboard_time` and `format_pinboard_time` instead
 
 ### Performance
 - **MAJOR**: Optimized N+1 query pattern in `_update_bookmark_tags()` method - now uses batch operations instead of individual queries for each tag

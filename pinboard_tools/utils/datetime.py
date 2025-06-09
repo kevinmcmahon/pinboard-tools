@@ -40,12 +40,3 @@ def format_boolean_for_pinboard(value: bool) -> str:
     return "yes" if value else "no"
 
 
-# Aliases for backwards compatibility
-def parse_datetime(time_str: str) -> datetime:
-    """Parse datetime string (alias for parse_pinboard_time)"""
-    return parse_pinboard_time(time_str)
-
-
-def format_datetime(dt: datetime) -> str:
-    """Format datetime (alias for format_pinboard_time)"""
-    return format_pinboard_time(dt)

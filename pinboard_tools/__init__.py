@@ -26,7 +26,7 @@ from .sync.bidirectional import BidirectionalSync
 
 # Utilities
 from .utils.chunking import chunk_bookmarks_for_llm
-from .utils.datetime import format_datetime, parse_datetime
+from .utils.datetime import format_pinboard_time, parse_pinboard_time
 
 __all__ = [
     # Sync
@@ -42,8 +42,8 @@ __all__ = [
     "TagSimilarityDetector",
     # Utils
     "chunk_bookmarks_for_llm",
-    "format_datetime",
+    "format_pinboard_time",
     "get_session",
     "init_database",
-    "parse_datetime",
+    "parse_pinboard_time",
 ]
