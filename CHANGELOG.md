@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Foreign key constraints are now properly enabled on database connections
 - Added constants for API rate limiting (`PINBOARD_RATE_LIMIT_SECONDS`, `RATE_LIMIT_BUFFER`)
 - Added test for batch tag operations to verify N+1 query optimization
+- Comprehensive Sphinx documentation with API reference, user guides, and examples
+- RTD theme with autodoc, type hints, and intersphinx support
 
 ### Changed
 - Database initialization now loads schema from external `schema.sql` file instead of embedded string

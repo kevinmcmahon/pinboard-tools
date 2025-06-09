@@ -74,5 +74,8 @@ sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 [dependency-groups]
 dev = [
     "isort>=6.0.1",
+    "sphinx>=8.2.3",
+    "sphinx-autodoc-typehints>=3.2.0",
+    "sphinx-rtd-theme>=3.0.2",
     "types-requests>=2.32.0.20250602",
 ]
