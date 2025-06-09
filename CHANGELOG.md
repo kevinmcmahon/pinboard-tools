@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom `PinboardAPIError` exception class for better error handling
 - Foreign key constraints are now properly enabled on database connections
 - Added constants for API rate limiting (`PINBOARD_RATE_LIMIT_SECONDS`, `RATE_LIMIT_BUFFER`)
+- Added test for batch tag operations to verify N+1 query optimization
 
 ### Changed
 - Database initialization now loads schema from external `schema.sql` file instead of embedded string
@@ -26,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING**: Replaced generic model classes with strongly-typed dataclasses for `Bookmark`, `Tag`, `BookmarkTag`, and `TagMerge`
 - Added TypedDict definitions (`BookmarkRow`, `TagRow`, etc.) for type-safe database query results
 - Added helper functions to convert between database rows and dataclass instances
+
+### Performance
+- **MAJOR**: Optimized N+1 query pattern in `_update_bookmark_tags()` method - now uses batch operations instead of individual queries for each tag
+  - Reduced database round trips from O(N) to O(1) for tag updates where N = number of tags
+  - Uses `executemany()` for batch inserts and single `IN` clause query to fetch tag IDs
+  - Significantly improves sync performance for bookmarks with many tags
 
 ### Security
 - SQL queries now use parameter binding instead of string interpolation

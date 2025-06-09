@@ -276,17 +276,28 @@ class BidirectionalSync:
 
         if tags_str:
             tags = [tag.strip().lower() for tag in tags_str.split()]
-            for tag in tags:
-                # Insert or get tag
-                self.db.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
-                cursor = self.db.execute("SELECT id FROM tags WHERE name = ?", (tag,))
-                tag_id = cursor.fetchone()["id"]
 
-                # Link bookmark to tag
-                self.db.execute(
-                    "INSERT INTO bookmark_tags (bookmark_id, tag_id) VALUES (?, ?)",
-                    (bookmark_id, tag_id),
-                )
+            # Batch insert all tags at once
+            tag_params: list[tuple[object, ...]] = [(tag,) for tag in tags]
+            self.db.executemany(
+                "INSERT OR IGNORE INTO tags (name) VALUES (?)", tag_params
+            )
+
+            # Get all tag IDs in a single query using IN clause
+            placeholders = ",".join("?" * len(tags))
+            cursor = self.db.execute(
+                f"SELECT id, name FROM tags WHERE name IN ({placeholders})", tuple(tags)
+            )
+            tag_map = {row["name"]: row["id"] for row in cursor.fetchall()}
+
+            # Batch insert bookmark-tag relationships
+            bookmark_tag_params: list[tuple[object, ...]] = [
+                (bookmark_id, tag_map[tag]) for tag in tags if tag in tag_map
+            ]
+            self.db.executemany(
+                "INSERT INTO bookmark_tags (bookmark_id, tag_id) VALUES (?, ?)",
+                bookmark_tag_params,
+            )
 
     def _update_sync_timestamps(self) -> None:
         """Update last sync timestamp for all synced bookmarks"""

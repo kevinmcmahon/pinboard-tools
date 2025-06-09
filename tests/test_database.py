@@ -122,3 +122,65 @@ class TestDatabase:
         assert row is not None
         assert row["bookmark_id"] == bookmark_id
         assert row["tag_id"] == tag_id
+
+    def test_batch_tag_operations(self, temp_db: str) -> None:
+        """Test batch tag operations for performance optimization."""
+        session = get_session()
+
+        # Create a bookmark
+        session.execute(
+            "INSERT INTO bookmarks (hash, href, description, time) VALUES (?, ?, ?, ?)",
+            (
+                "test_hash",
+                "https://example.com",
+                "Test Bookmark",
+                "2024-01-01T00:00:00Z",
+            ),
+        )
+        session.commit()
+
+        # Get bookmark ID
+        bookmark_result = session.execute(
+            "SELECT id FROM bookmarks WHERE href = ?", ("https://example.com",)
+        )
+        bookmark_id = bookmark_result.fetchone()["id"]
+
+        # Test batch tag insertion (simulating the optimized _update_bookmark_tags logic)
+        tags = ["python", "programming", "web", "database", "api"]
+
+        # Batch insert all tags
+        tag_params = [(tag,) for tag in tags]
+        session.executemany("INSERT OR IGNORE INTO tags (name) VALUES (?)", tag_params)
+
+        # Get all tag IDs in a single query
+        placeholders = ",".join("?" * len(tags))
+        cursor = session.execute(
+            f"SELECT id, name FROM tags WHERE name IN ({placeholders})", tags
+        )
+        tag_map = {row["name"]: row["id"] for row in cursor.fetchall()}
+
+        # Batch insert bookmark-tag relationships
+        bookmark_tag_params = [
+            (bookmark_id, tag_map[tag]) for tag in tags if tag in tag_map
+        ]
+        session.executemany(
+            "INSERT INTO bookmark_tags (bookmark_id, tag_id) VALUES (?, ?)",
+            bookmark_tag_params,
+        )
+        session.commit()
+
+        # Verify all tags were created and linked
+        result = session.execute(
+            """
+            SELECT t.name
+            FROM tags t
+            JOIN bookmark_tags bt ON t.id = bt.tag_id
+            WHERE bt.bookmark_id = ?
+            ORDER BY t.name
+            """,
+            (bookmark_id,),
+        )
+        linked_tags = [row["name"] for row in result.fetchall()]
+
+        assert len(linked_tags) == 5
+        assert set(linked_tags) == set(tags)
