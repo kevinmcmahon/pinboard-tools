@@ -61,9 +61,9 @@ jobs:
                   # Bump version (bump-my-version will update all configured files)
                   bump-my-version bump ${{ github.event.inputs.version_bump }} --no-tag --no-commit --verbose
 
-                  # Get new version
-                  NEW_VERSION=$(bump-my-version show new_version)
-                  echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+                  # Get new version (after bump, current_version reflects the new version)
+                  NEW_VERSION=$(bump-my-version show current_version)
+                  echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
                   # Commit changes
                   git add pyproject.toml pinboard_tools/__init__.py
@@ -82,7 +82,7 @@ jobs:
                   if [ -z "$PREVIOUS_TAG" ]; then
                     NOTES="Initial release"
                   else
-                    NOTES=$(git log --pretty=format:"- %s" $PREVIOUS_TAG..HEAD | grep -v "^- chore: bump version")
+                    NOTES=$(git log --pretty=format:"- %s" ${PREVIOUS_TAG}..HEAD | grep -v "^- chore: bump version" || echo "No notable changes since last release")
                   fi
 
                   # Create release
