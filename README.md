@@ -116,4 +116,4 @@ consolidator.consolidate_tags(old_tag="python3", new_tag="python")
 
 ## License
 
-MIT License - see LICENSE file for details
+Apache License 2.0 - see LICENSE file for details
