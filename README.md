@@ -1,6 +1,6 @@
 # pinboard-tools
 
-[![PyPI version](https://badge.fury.io/py/pinboard-tools.svg)](https://pypi.org/project/pinboard-tools/)
+[![PyPI version](https://img.shields.io/pypi/v/pinboard-tools.svg)](https://pypi.org/project/pinboard-tools/)
 [![Python versions](https://img.shields.io/pypi/pyversions/pinboard-tools.svg)](https://pypi.org/project/pinboard-tools/)
 [![License](https://img.shields.io/pypi/l/pinboard-tools.svg)](https://github.com/kevinmcmahon/pinboard-tools/blob/main/LICENSE)
 
