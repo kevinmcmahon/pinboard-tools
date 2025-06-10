@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.1] - 2025-06-10
 
 ### Fixed
 - **CRITICAL**: Fixed schema inconsistency between `schema.sql` and `models.py` - database now uses single source of truth from `schema.sql` file
@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQL queries now use parameter binding instead of string interpolation
 - Database connection errors no longer expose internal paths in production
 
-## [0.1.0] - 2024-01-01
+## [0.1.0] - 2025-06-09
 
 ### Added
 - Initial release
