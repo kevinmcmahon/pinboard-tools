@@ -1,13 +1,12 @@
 # ABOUTME: Database models and schema definitions for Pinboard bookmarks
 # ABOUTME: Defines the SQLite database structure and common queries
 
+import importlib.resources as pkg_resources
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, TypedDict
-
-import importlib.resources as pkg_resources
 
 
 class SyncStatus(Enum):
@@ -151,8 +150,8 @@ class Database:
 
         # Access schema.sql as package data using modern importlib.resources API
         try:
-            files = pkg_resources.files('pinboard_tools.data')
-            schema_sql = (files / 'schema.sql').read_text(encoding='utf-8')
+            files = pkg_resources.files("pinboard_tools.data")
+            schema_sql = (files / "schema.sql").read_text(encoding="utf-8")
         except FileNotFoundError as e:
             raise FileNotFoundError(
                 f"Schema file not found in package data: {e}"

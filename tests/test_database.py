@@ -5,7 +5,7 @@ import os
 import tempfile
 from collections.abc import Generator
 
-import pytest  # type: ignore[import-not-found]
+import pytest
 
 from pinboard_tools.database.models import (
     get_session,
@@ -16,7 +16,7 @@ from pinboard_tools.database.models import (
 class TestDatabase:
     """Test database functionality."""
 
-    @pytest.fixture  # type: ignore[misc]
+    @pytest.fixture
     def temp_db(self) -> Generator[str, None, None]:
         """Create temporary database for testing."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
