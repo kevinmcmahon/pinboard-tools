@@ -78,9 +78,9 @@ class TestSchemaPackaging:
         computed_schema_path: Path = pinboard_tools_dir / "data" / "schema.sql"
 
         # In development, this should exist
-        assert (
-            computed_schema_path.exists()
-        ), f"Schema not found at computed path: {computed_schema_path}"
+        assert computed_schema_path.exists(), (
+            f"Schema not found at computed path: {computed_schema_path}"
+        )
 
         # The issue: this path won't exist in installed packages
         # because schema.sql won't be included in the distribution
