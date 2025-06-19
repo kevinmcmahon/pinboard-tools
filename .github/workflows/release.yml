@@ -75,7 +75,7 @@ jobs:
 
             - name: Create Release
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_TOKEN: ${{ secrets.GH_PAT }}
               run: |
                   # Generate release notes
                   PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
