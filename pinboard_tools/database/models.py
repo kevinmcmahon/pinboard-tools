@@ -5,8 +5,9 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
 from typing import Any, TypedDict
+
+import importlib.resources as pkg_resources
 
 
 class SyncStatus(Enum):
@@ -148,16 +149,14 @@ class Database:
         """Initialize database schema from schema.sql file"""
         conn = self.connect()
 
-        # Find schema.sql file relative to this module
-        module_dir = Path(__file__).parent.parent.parent
-        schema_path = module_dir / "schema.sql"
-
-        if not schema_path.exists():
-            raise FileNotFoundError(f"Schema file not found: {schema_path}")
-
-        # Read and execute schema
-        with open(schema_path, encoding="utf-8") as f:
-            schema_sql = f.read()
+        # Access schema.sql as package data using modern importlib.resources API
+        try:
+            files = pkg_resources.files('pinboard_tools.data')
+            schema_sql = (files / 'schema.sql').read_text(encoding='utf-8')
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Schema file not found in package data: {e}"
+            ) from e
 
         conn.executescript(schema_sql)
         conn.commit()
