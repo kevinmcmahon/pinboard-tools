@@ -89,4 +89,5 @@ jobs:
                   gh release create "v${{ steps.bump.outputs.new_version }}" \
                     --title "v${{ steps.bump.outputs.new_version }}" \
                     --notes "$NOTES" \
+                    --draft=false \
                     ${{ github.event.inputs.prerelease == 'true' && '--prerelease' || '' }}
