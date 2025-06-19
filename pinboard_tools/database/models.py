@@ -31,13 +31,14 @@ class Bookmark:
     time: datetime | str = ""
     shared: bool = True
     toread: bool = False
-    tags: str | None = None
     created_at: datetime | str | None = None
     updated_at: datetime | str | None = None
     sync_status: str = SyncStatus.SYNCED.value
     last_synced_at: datetime | str | None = None
     tags_modified: bool = False
     original_tags: str | None = None
+    # Tags are stored in normalized form, use get_bookmark_tags() to retrieve
+    _tags: list[str] | None = None
 
 
 @dataclass
@@ -82,13 +83,14 @@ class BookmarkRow(TypedDict, total=False):
     time: str
     shared: int
     toread: int
-    tags: str | None
     created_at: str
     updated_at: str
     sync_status: str
     last_synced_at: str | None
     tags_modified: int
     original_tags: str | None
+    # tags field only present in views that generate it dynamically
+    tags: str | None
 
 
 class TagRow(TypedDict, total=False):
@@ -222,6 +224,12 @@ def get_session() -> Database:
 # Helper functions for converting between database rows and dataclass instances
 def bookmark_from_row(row: dict[str, Any] | BookmarkRow) -> Bookmark:
     """Convert database row to Bookmark dataclass"""
+    # Handle tags if present in view queries
+    tags_list = None
+    tags_value = row.get("tags")
+    if tags_value:
+        tags_list = tags_value.split()
+
     return Bookmark(
         id=row.get("id"),
         href=row.get("href", ""),
@@ -232,13 +240,13 @@ def bookmark_from_row(row: dict[str, Any] | BookmarkRow) -> Bookmark:
         time=row.get("time", ""),
         shared=bool(row.get("shared", True)),
         toread=bool(row.get("toread", False)),
-        tags=row.get("tags"),
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
         sync_status=row.get("sync_status", SyncStatus.SYNCED.value),
         last_synced_at=row.get("last_synced_at"),
         tags_modified=bool(row.get("tags_modified", False)),
         original_tags=row.get("original_tags"),
+        _tags=tags_list,
     )
 
 
@@ -258,3 +266,67 @@ def bookmark_tag_from_row(row: dict[str, Any] | BookmarkTagRow) -> BookmarkTag:
         tag_id=row["tag_id"],
         created_at=row.get("created_at"),
     )
+
+
+# Tag utility functions
+def get_bookmark_tags(db: Database, bookmark_id: int) -> list[str]:
+    """Get tags for a bookmark as a list of strings"""
+    cursor = db.execute(
+        """
+        SELECT t.name
+        FROM tags t
+        JOIN bookmark_tags bt ON t.id = bt.tag_id
+        WHERE bt.bookmark_id = ?
+        ORDER BY t.name
+    """,
+        (bookmark_id,),
+    )
+    return [row["name"] for row in cursor.fetchall()]
+
+
+def get_bookmark_tags_string(db: Database, bookmark_id: int) -> str:
+    """Get tags for a bookmark as a space-separated string for Pinboard API"""
+    tags = get_bookmark_tags(db, bookmark_id)
+    return " ".join(tags)
+
+
+def set_bookmark_tags(db: Database, bookmark_id: int, tags: list[str]) -> None:
+    """Set tags for a bookmark (replaces existing tags)"""
+    # Normalize tags (strip whitespace, convert to lowercase, deduplicate)
+    normalized_tags = list(set(tag.strip().lower() for tag in tags if tag.strip()))
+
+    # Clear existing tags
+    db.execute("DELETE FROM bookmark_tags WHERE bookmark_id = ?", (bookmark_id,))
+
+    if normalized_tags:
+        # Ensure all tags exist
+        tag_params: list[tuple[object, ...]] = [(tag,) for tag in normalized_tags]
+        db.executemany("INSERT OR IGNORE INTO tags (name) VALUES (?)", tag_params)
+
+        # Get tag IDs
+        placeholders = ",".join("?" * len(normalized_tags))
+        cursor = db.execute(
+            f"SELECT id, name FROM tags WHERE name IN ({placeholders})",
+            tuple(normalized_tags),
+        )
+        tag_map = {row["name"]: row["id"] for row in cursor.fetchall()}
+
+        # Create bookmark-tag relationships
+        bookmark_tag_params: list[tuple[object, ...]] = [
+            (bookmark_id, tag_map[tag]) for tag in normalized_tags if tag in tag_map
+        ]
+        db.executemany(
+            "INSERT INTO bookmark_tags (bookmark_id, tag_id) VALUES (?, ?)",
+            bookmark_tag_params,
+        )
+
+
+def bookmark_with_tags(db: Database, bookmark_id: int) -> Bookmark | None:
+    """Get a bookmark with its tags populated"""
+    cursor = db.execute(
+        "SELECT * FROM bookmarks_with_tags WHERE id = ?", (bookmark_id,)
+    )
+    row = cursor.fetchone()
+    if row:
+        return bookmark_from_row(dict(row))
+    return None

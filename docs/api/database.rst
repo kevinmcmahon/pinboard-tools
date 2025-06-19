@@ -72,6 +72,19 @@ Helper Functions
 
 .. autofunction:: pinboard_tools.database.models.bookmark_tag_from_row
 
+Tag Utility Functions
+=====================
+
+These functions provide a clean API for working with tags in their normalized form:
+
+.. autofunction:: pinboard_tools.database.models.get_bookmark_tags
+
+.. autofunction:: pinboard_tools.database.models.get_bookmark_tags_string
+
+.. autofunction:: pinboard_tools.database.models.set_bookmark_tags
+
+.. autofunction:: pinboard_tools.database.models.bookmark_with_tags
+
 Queries
 =======
 

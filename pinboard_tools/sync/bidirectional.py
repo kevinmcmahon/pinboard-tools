@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
-from ..database.models import Database
+from ..database.models import Database, get_bookmark_tags_string, set_bookmark_tags
 from ..utils.datetime import parse_boolean, parse_pinboard_time
 from .api import PinboardAPI
 
@@ -105,11 +105,14 @@ class BidirectionalSync:
 
             if not dry_run:
                 try:
+                    # Get tags from normalized tables
+                    tags_string = get_bookmark_tags_string(self.db, bookmark["id"])
+
                     success = self.api.add_post(
                         url=bookmark["href"],
                         description=bookmark["description"],
                         extended=bookmark["extended"] or "",
-                        tags=bookmark["tags"] or "",
+                        tags=tags_string,
                         dt=datetime.fromisoformat(bookmark["time"]),
                         shared="yes" if bookmark["shared"] else "no",
                         toread="yes" if bookmark["toread"] else "no",
@@ -215,7 +218,7 @@ class BidirectionalSync:
         self.db.execute(
             """
             UPDATE bookmarks
-            SET href = ?, description = ?, extended = ?, tags = ?,
+            SET href = ?, description = ?, extended = ?,
                 time = ?, toread = ?, shared = ?, meta = ?,
                 sync_status = 'synced', last_synced_at = ?
             WHERE hash = ?
@@ -224,7 +227,6 @@ class BidirectionalSync:
                 post["href"],
                 post["description"],
                 post.get("extended", ""),
-                post.get("tags", ""),
                 post["time"],
                 parse_boolean(post.get("toread", "no")),
                 parse_boolean(post.get("shared", "yes")),
@@ -234,15 +236,15 @@ class BidirectionalSync:
             ),
         )
 
-        # Update tags
+        # Update tags using normalized approach
         self._update_bookmark_tags(post["hash"], post.get("tags", ""))
 
     def _insert_bookmark_from_remote(self, post: dict[str, Any]) -> None:
         """Insert new bookmark from remote"""
         self.db.execute(
             """
-            INSERT INTO bookmarks (hash, href, description, extended, meta, time, toread, shared, tags, sync_status, last_synced_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?)
+            INSERT INTO bookmarks (hash, href, description, extended, meta, time, toread, shared, sync_status, last_synced_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?)
         """,
             (
                 post["hash"],
@@ -253,12 +255,11 @@ class BidirectionalSync:
                 post["time"],
                 parse_boolean(post.get("toread", "no")),
                 parse_boolean(post.get("shared", "yes")),
-                post.get("tags", ""),
                 datetime.now(UTC).isoformat(),
             ),
         )
 
-        # Update tags
+        # Update tags using normalized approach
         self._update_bookmark_tags(post["hash"], post.get("tags", ""))
 
     def _update_bookmark_tags(self, bookmark_hash: str, tags_str: str) -> None:
@@ -267,37 +268,17 @@ class BidirectionalSync:
         cursor = self.db.execute(
             "SELECT id FROM bookmarks WHERE hash = ?", (bookmark_hash,)
         )
-        bookmark_id = cursor.fetchone()["id"]
+        row = cursor.fetchone()
+        if not row:
+            return
 
-        # Clear existing tags
-        self.db.execute(
-            "DELETE FROM bookmark_tags WHERE bookmark_id = ?", (bookmark_id,)
-        )
+        bookmark_id = row["id"]
 
-        if tags_str:
-            tags = [tag.strip().lower() for tag in tags_str.split()]
+        # Parse tags from string
+        tags = [tag.strip() for tag in tags_str.split()] if tags_str else []
 
-            # Batch insert all tags at once
-            tag_params: list[tuple[object, ...]] = [(tag,) for tag in tags]
-            self.db.executemany(
-                "INSERT OR IGNORE INTO tags (name) VALUES (?)", tag_params
-            )
-
-            # Get all tag IDs in a single query using IN clause
-            placeholders = ",".join("?" * len(tags))
-            cursor = self.db.execute(
-                f"SELECT id, name FROM tags WHERE name IN ({placeholders})", tuple(tags)
-            )
-            tag_map = {row["name"]: row["id"] for row in cursor.fetchall()}
-
-            # Batch insert bookmark-tag relationships
-            bookmark_tag_params: list[tuple[object, ...]] = [
-                (bookmark_id, tag_map[tag]) for tag in tags if tag in tag_map
-            ]
-            self.db.executemany(
-                "INSERT INTO bookmark_tags (bookmark_id, tag_id) VALUES (?, ?)",
-                bookmark_tag_params,
-            )
+        # Use utility function to set tags
+        set_bookmark_tags(self.db, bookmark_id, tags)
 
     def _update_sync_timestamps(self) -> None:
         """Update last sync timestamp for all synced bookmarks"""

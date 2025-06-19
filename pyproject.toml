@@ -1,13 +1,13 @@
 [project]
+authors = [
+    { name = "Kevin McMahon", email = "87225+kevinmcmahon@users.noreply.github.com" },
+]
 name = "pinboard-tools"
 version = "0.1.4"
 description = "A Python library for syncing and managing Pinboard bookmarks"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "Apache-2.0"}
-authors = [
-    {name = "Kevin McMahon", email = "kevin@example.com"},
-]
+license = { text = "Apache-2.0" }
 keywords = ["pinboard", "bookmarks", "sync", "api"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -16,25 +16,16 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Internet :: WWW/HTTP",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
-dependencies = [
-    "requests>=2.31.0",
-    "rich>=14.0.0",
-]
+dependencies = ["requests>=2.31.0", "rich>=14.0.0"]
 
 [project.optional-dependencies]
-dev = [
-    "ruff>=0.4.0",
-    "mypy>=1.10.0",
-    "pytest>=8.2.0",
-    "pytest-cov>=5.0.0",
-]
-cli = [
-    "rich>=13.7.0",
-]
+dev = ["ruff>=0.4.0", "mypy>=1.10.0", "pytest>=8.2.0", "pytest-cov>=5.0.0"]
+cli = ["rich>=13.7.0"]
 
 [build-system]
 requires = ["hatchling"]
@@ -94,6 +85,11 @@ replace = 'version = "{new_version}"'
 
 [[tool.bumpversion.files]]
 filename = "pinboard_tools/__init__.py"
+
+[[tool.bumpversion.files]]
+filename = "docs/conf.py"
+search = 'release = "{current_version}"'
+replace = 'release = "{new_version}"'
 
 [dependency-groups]
 dev = [

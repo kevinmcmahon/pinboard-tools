@@ -71,6 +71,7 @@ Examples
    :maxdepth: 2
 
    examples/basic-sync
+   examples/tag-management
 
 Indices and tables
 ==================
