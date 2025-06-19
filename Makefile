@@ -65,7 +65,7 @@ format-check: ## Check code formatting without making changes
 	$(UV) run --with isort isort --check-only $(PYTHON_DIRS)
 
 typecheck: ## Run type checking with mypy
-	$(UV) run --with mypy mypy $(PYTHON_DIRS)
+	$(UV) run --with mypy,pytest mypy $(PYTHON_DIRS)
 
 # Combined quality checks
 check: lint typecheck format-check ## Run all code quality checks (lint, typecheck, format-check)

@@ -5,7 +5,7 @@ import os
 import tempfile
 from collections.abc import Generator
 
-import pytest  # type: ignore[import-not-found]
+import pytest
 
 from pinboard_tools.analysis.similarity import TagSimilarityDetector
 from pinboard_tools.database.models import get_session, init_database
@@ -14,7 +14,7 @@ from pinboard_tools.database.models import get_session, init_database
 class TestTagAnalysis:
     """Test tag analysis functionality."""
 
-    @pytest.fixture  # type: ignore[misc]
+    @pytest.fixture
     def temp_db_with_tags(self) -> Generator[str, None, None]:
         """Create temporary database with sample tags."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:

@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2025-06-19
+
+### Fixed
+- **CRITICAL**: Fixed missing schema.sql file in package distribution that made the library completely non-functional after installation
+- Schema file is now properly included as package data using `importlib.resources` for reliable access in both development and installed environments
+- Updated schema loading to use modern `importlib.resources.files()` API instead of deprecated `read_text()`
+
+### Added
+- Comprehensive packaging tests to prevent future distribution issues
+- Package integrity tests that simulate real-world installation scenarios
+- Added `/pinboard_tools/data/` directory containing `schema.sql` as package data
+
+### Changed
+- Moved schema.sql from project root to `pinboard_tools/data/schema.sql` for proper packaging
+- Database initialization now uses `importlib.resources` instead of file path resolution
+- Improved error messages to clearly indicate package data access issues
+
 ## [0.1.2] - 2025-06-10
 
 ### Added
