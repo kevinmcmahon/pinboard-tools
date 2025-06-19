@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2025-06-19
+
+### Added
+- Enhanced tag architecture with comprehensive normalized storage system
+- New `TagManager` class for centralized tag operations and validation
+- Tag normalization utilities with whitespace handling and duplicate detection
+- Comprehensive tag consolidation workflow with preview and confirmation
+- Advanced tag similarity detection using multiple algorithms (exact match, fuzzy matching, semantic similarity)
+- Rich CLI output with colored formatting and structured tables
+- Tag analytics and reporting features
+- Batch tag operations with optimized database queries
+
+### Changed
+- **BREAKING**: Upgraded database schema to fully normalized tag storage with junction tables
+- Refactored tag operations to use centralized `TagManager` instead of scattered methods
+- Improved tag similarity algorithms with configurable thresholds
+- Enhanced CLI with better user experience and visual feedback
+- Optimized database queries for tag operations to reduce N+1 patterns
+
+### Performance
+- Significantly improved tag consolidation performance through batch operations
+- Reduced database queries for tag similarity detection
+- Optimized tag normalization with caching for repeated operations
+
 ## [0.1.4] - 2025-06-19
 
 ### Fixed
