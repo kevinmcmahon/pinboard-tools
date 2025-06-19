@@ -74,16 +74,13 @@ class TestSchemaPackaging:
     def test_schema_path_resolution_logic(self) -> None:
         """Test the current schema path resolution logic"""
         # This is what the current code computes
-        models_file = (
-            Path(__file__).parent.parent / "pinboard_tools" / "database" / "models.py"
-        )
-        computed_module_dir = models_file.parent.parent.parent
-        computed_schema_path = computed_module_dir / "schema.sql"
+        pinboard_tools_dir: Path = Path(__file__).parent.parent / "pinboard_tools"
+        computed_schema_path: Path = pinboard_tools_dir / "data" / "schema.sql"
 
         # In development, this should exist
-        assert computed_schema_path.exists(), (
-            f"Schema not found at computed path: {computed_schema_path}"
-        )
+        assert (
+            computed_schema_path.exists()
+        ), f"Schema not found at computed path: {computed_schema_path}"
 
         # The issue: this path won't exist in installed packages
         # because schema.sql won't be included in the distribution
