@@ -1,7 +1,7 @@
 # ABOUTME: Makefile for pinboard-tools project with development tasks
 # ABOUTME: Provides standard targets for testing, linting, formatting, and project management
 
-.PHONY: help install install-dev clean test test-cov lint format format-imports typecheck check all
+.PHONY: help install install-dev clean test test-cov lint format format-imports typecheck check all docs docs-llm docs-clean
 .DEFAULT_GOAL := help
 
 # Variables
@@ -81,6 +81,18 @@ build: ## Build distribution packages
 	$(UV) build
 
 # Documentation targets
+docs: ## Build HTML documentation
+	cd docs && $(UV) run --with sphinx sphinx-build -b html . _build/html
+	@echo "Documentation built in docs/_build/html/"
+
+docs-llm: ## Build LLM-friendly documentation formats (text and singlehtml)
+	cd docs && make llm
+	@echo "LLM-friendly docs built in docs/_build/text/ and docs/_build/singlehtml/"
+
+docs-clean: ## Clean documentation build files
+	rm -rf docs/_build/
+	@echo "Documentation build files cleaned"
+
 docs-deps: ## Install documentation dependencies
 	$(UV) add --dev sphinx sphinx-rtd-theme
 

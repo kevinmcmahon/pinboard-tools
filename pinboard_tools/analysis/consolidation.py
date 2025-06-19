@@ -74,43 +74,35 @@ class TagConsolidator:
         # Find bookmarks to update
         cursor = self.db.execute(
             """
-            SELECT DISTINCT b.id, b.tags
-            FROM bookmarks b
-            JOIN bookmark_tags bt ON b.id = bt.bookmark_id
-            WHERE bt.tag_id = ?
+            SELECT DISTINCT bookmark_id
+            FROM bookmark_tags
+            WHERE tag_id = ?
         """,
             (old_tag_id,),
         )
 
-        bookmarks_to_update = list(cursor)
-        update_count = len(bookmarks_to_update)
+        bookmark_ids = [row["bookmark_id"] for row in cursor.fetchall()]
+        update_count = len(bookmark_ids)
 
         if not dry_run and new_tag_id:
-            # Update bookmark_tags table
-            for bookmark in bookmarks_to_update:
+            # Update bookmark_tags table for each bookmark
+            for bookmark_id in bookmark_ids:
                 # Remove old tag association
                 self.db.execute(
                     "DELETE FROM bookmark_tags WHERE bookmark_id = ? AND tag_id = ?",
-                    (bookmark["id"], old_tag_id),
+                    (bookmark_id, old_tag_id),
                 )
 
                 # Add new tag association (if not already exists)
                 self.db.execute(
                     "INSERT OR IGNORE INTO bookmark_tags (bookmark_id, tag_id) VALUES (?, ?)",
-                    (bookmark["id"], new_tag_id),
+                    (bookmark_id, new_tag_id),
                 )
 
-                # Update tags string in bookmarks table
-                tags = bookmark["tags"].split() if bookmark["tags"] else []
-                if old_tag in tags:
-                    tags.remove(old_tag)
-                if new_tag not in tags:
-                    tags.append(new_tag)
-
-                new_tags_str = " ".join(sorted(tags))
+                # Mark bookmark for sync (triggers will handle this automatically, but let's be explicit)
                 self.db.execute(
-                    "UPDATE bookmarks SET tags = ?, sync_status = 'pending_local' WHERE id = ?",
-                    (new_tags_str, bookmark["id"]),
+                    "UPDATE bookmarks SET sync_status = 'pending_local' WHERE id = ? AND sync_status = 'synced'",
+                    (bookmark_id,),
                 )
 
             # Delete old tag if no longer used

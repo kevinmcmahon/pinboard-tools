@@ -1,6 +1,3 @@
-# ABOUTME: Sphinx documentation configuration for Pinboard Tools
-# ABOUTME: Configures autodoc, themes, and build settings
-
 # Configuration file for the Sphinx documentation builder.
 #
 # For the full list of built-in configuration values, see the documentation:
@@ -16,9 +13,9 @@ sys.path.insert(0, os.path.abspath(".."))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "Pinboard Tools"
-copyright = "2025, Kevin"
-author = "Kevin"
-release = "0.1.3"
+copyright = "2025, Kevin McMahon"
+author = "Kevin McMahon"
+release = "0.1.4"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -94,3 +91,6 @@ html_theme_options = {
     "includehidden": True,
     "titles_only": False,
 }
+
+# -- Options for text output -------------------------------------------------
+text_sectionchars = '*=-~"+`'
