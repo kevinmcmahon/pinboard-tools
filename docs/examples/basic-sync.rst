@@ -9,13 +9,16 @@ Setup
 
 .. code-block:: python
 
-   from pinboard_tools import BidirectionalSync, init_database
+   from pinboard_tools import BidirectionalSync, get_session, init_database
 
    # Initialize database
    init_database("my_bookmarks.db")
+   
+   # Get database session
+   db = get_session()
 
    # Create sync client with your API token
-   sync = BidirectionalSync(api_token="your_username:your_api_token")
+   sync = BidirectionalSync(db=db, api_token="your_username:your_api_token")
 
 Simple Sync
 ===========
@@ -91,7 +94,7 @@ Complete Example
    
    import os
    import sys
-   from pinboard_tools import BidirectionalSync, init_database
+   from pinboard_tools import BidirectionalSync, get_session, init_database
    from pinboard_tools.sync.bidirectional import SyncDirection, ConflictResolution
 
    def main():
@@ -107,8 +110,11 @@ Complete Example
            init_database(db_path)
            print(f"Database initialized: {db_path}")
            
+           # Get database session
+           db = get_session()
+           
            # Create sync client
-           sync = BidirectionalSync(api_token=api_token)
+           sync = BidirectionalSync(db=db, api_token=api_token)
            print("Sync client created")
            
            # Perform sync

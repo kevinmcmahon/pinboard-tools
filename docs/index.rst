@@ -28,13 +28,16 @@ Basic Usage
 
 .. code-block:: python
 
-   from pinboard_tools import BidirectionalSync, init_database
+   from pinboard_tools import BidirectionalSync, get_session, init_database
 
    # Initialize database
    init_database("bookmarks.db")
+   
+   # Get database session
+   db = get_session()
 
    # Create sync client
-   sync = BidirectionalSync(api_token="your_pinboard_token")
+   sync = BidirectionalSync(db=db, api_token="your_pinboard_token")
 
    # Perform bidirectional sync
    results = sync.sync()

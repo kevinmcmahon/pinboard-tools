@@ -44,10 +44,14 @@ You'll need a Pinboard API token to sync with Pinboard.in:
 
 .. code-block:: python
 
-   from pinboard_tools import BidirectionalSync
+   from pinboard_tools import BidirectionalSync, get_session, init_database
+   
+   # Initialize database first
+   init_database()
+   db = get_session()
 
    # Initialize sync client
-   sync = BidirectionalSync(api_token="your_username:your_token")
+   sync = BidirectionalSync(db=db, api_token="your_username:your_token")
 
 Environment Variables
 ---------------------
@@ -61,10 +65,14 @@ You can also set the token via environment variable:
 .. code-block:: python
 
    import os
-   from pinboard_tools import BidirectionalSync
+   from pinboard_tools import BidirectionalSync, get_session, init_database
 
+   # Initialize database
+   init_database()
+   db = get_session()
+   
    token = os.getenv("PINBOARD_API_TOKEN")
-   sync = BidirectionalSync(api_token=token)
+   sync = BidirectionalSync(db=db, api_token=token)
 
 Rate Limiting
 =============
@@ -91,10 +99,13 @@ Configure which direction to sync:
 
 .. code-block:: python
 
-   from pinboard_tools import BidirectionalSync
+   from pinboard_tools import BidirectionalSync, get_session, init_database
    from pinboard_tools.sync.bidirectional import SyncDirection
 
-   sync = BidirectionalSync(api_token="your_token")
+   # Initialize database
+   init_database()
+   db = get_session()
+   sync = BidirectionalSync(db=db, api_token="your_token")
 
    # Bidirectional sync (default)
    sync.sync(direction=SyncDirection.BIDIRECTIONAL)
