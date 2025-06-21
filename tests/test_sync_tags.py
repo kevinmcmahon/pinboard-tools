@@ -402,3 +402,112 @@ class TestSyncWithNormalizedTags:
         # Should only have one instance
         deduped_tags = get_bookmark_tags(session, bookmark_id)
         assert deduped_tags == ["python"]
+
+    def test_remote_sync_does_not_trigger_pending_status(
+        self, temp_db_with_bookmarks: str
+    ) -> None:
+        """Test that syncing from remote doesn't mark bookmarks as pending_local.
+
+        This test addresses the bug where database triggers incorrectly marked
+        bookmarks as pending during legitimate remote sync operations, causing
+        infinite sync loops.
+        """
+        # Use temporary database
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        try:
+            # Initialize fresh database
+            init_database(db_path)
+            session = get_session()
+
+            # Mock API to provide predictable test data (avoids network calls and external dependencies)
+            mock_api = Mock()
+            mock_api.get_all_posts.return_value = [
+                {
+                    "hash": "hash1",
+                    "href": "http://example.com/1",
+                    "description": "Bookmark with multiple tags",
+                    "extended": "Extended description",
+                    "meta": "meta1",
+                    "time": "2024-01-01T00:00:00Z",
+                    "shared": "yes",
+                    "toread": "no",
+                    "tags": "python flask web-development",
+                },
+                {
+                    "hash": "hash2",
+                    "href": "http://example.com/2",
+                    "description": "Bookmark with no tags",
+                    "extended": "",
+                    "meta": "",
+                    "time": "2024-01-01T01:00:00Z",
+                    "shared": "no",
+                    "toread": "yes",
+                    "tags": "",
+                },
+                {
+                    "hash": "hash3",
+                    "href": "http://example.com/3",
+                    "description": "Bookmark with special chars in tags",
+                    "extended": "",
+                    "meta": "",
+                    "time": "2024-01-01T02:00:00Z",
+                    "shared": "yes",
+                    "toread": "no",
+                    "tags": "c++ machine-learning data_science",
+                },
+            ]
+
+            sync = BidirectionalSync(session, "test_token")
+            sync.api = mock_api
+
+            # Verify initial state: no bookmarks exist
+            initial_count = session.execute(
+                "SELECT COUNT(*) FROM bookmarks"
+            ).fetchone()[0]
+            assert initial_count == 0, "Database should start empty"
+
+            # Perform remote sync
+            sync._sync_remote_to_local(ConflictResolution.NEWEST_WINS, dry_run=False)
+
+            # Critical assertion: no bookmarks should be marked as pending_local
+            cursor = session.execute(
+                "SELECT COUNT(*) FROM bookmarks WHERE sync_status = 'pending_local'"
+            )
+            pending_count = cursor.fetchone()[0]
+            assert pending_count == 0, (
+                f"Remote sync should not create pending_local bookmarks, got {pending_count}"
+            )
+
+            # All bookmarks should be properly synced
+            cursor = session.execute(
+                "SELECT COUNT(*) FROM bookmarks WHERE sync_status = 'synced'"
+            )
+            synced_count = cursor.fetchone()[0]
+            expected_count = len(mock_api.get_all_posts.return_value)
+            assert synced_count == expected_count, (
+                f"Expected {expected_count} synced bookmarks, got {synced_count}"
+            )
+
+            # Verify tags_modified flag is not set for any bookmark
+            cursor = session.execute(
+                "SELECT COUNT(*) FROM bookmarks WHERE tags_modified = 1"
+            )
+            modified_count = cursor.fetchone()[0]
+            assert modified_count == 0, (
+                f"Remote sync should not set tags_modified flag, got {modified_count} bookmarks flagged"
+            )
+
+            # Verify sync context is properly cleaned up
+            cursor = session.execute(
+                "SELECT COUNT(*) FROM sync_context WHERE key = 'in_sync'"
+            )
+            context_count = cursor.fetchone()[0]
+            assert context_count == 0, (
+                "Sync context should be cleaned up after sync operation"
+            )
+
+        finally:
+            # Clean up
+            os.unlink(db_path)
