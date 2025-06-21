@@ -146,25 +146,34 @@ class BidirectionalSync:
         )
         local_bookmarks = {row["hash"]: dict(row) for row in cursor}
 
-        for post in remote_posts:
-            hash_value = post["hash"]
+        # Enter sync context to prevent triggers from marking bookmarks as pending
+        if not dry_run:
+            self.db.enter_sync_context()
 
-            if hash_value in local_bookmarks:
-                # Check if we need to update
-                local = local_bookmarks[hash_value]
-                if local["sync_status"] == "pending_local":
-                    # Conflict!
-                    self._handle_conflict(local, post, conflict_resolution, dry_run)
+        try:
+            for post in remote_posts:
+                hash_value = post["hash"]
+
+                if hash_value in local_bookmarks:
+                    # Check if we need to update
+                    local = local_bookmarks[hash_value]
+                    if local["sync_status"] == "pending_local":
+                        # Conflict!
+                        self._handle_conflict(local, post, conflict_resolution, dry_run)
+                    else:
+                        # Update local with remote changes
+                        if not dry_run:
+                            self._update_bookmark_from_remote(post)
+                        self.sync_stats["remote_to_local"] += 1
                 else:
-                    # Update local with remote changes
+                    # New bookmark from remote
                     if not dry_run:
-                        self._update_bookmark_from_remote(post)
+                        self._insert_bookmark_from_remote(post)
                     self.sync_stats["remote_to_local"] += 1
-            else:
-                # New bookmark from remote
-                if not dry_run:
-                    self._insert_bookmark_from_remote(post)
-                self.sync_stats["remote_to_local"] += 1
+        finally:
+            # Always exit sync context
+            if not dry_run:
+                self.db.exit_sync_context()
 
     def _handle_conflict(
         self,

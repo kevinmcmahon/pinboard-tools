@@ -200,6 +200,18 @@ class Database:
             self.commit()
         self.close()
 
+    def enter_sync_context(self) -> None:
+        """Mark that a sync operation is in progress to prevent triggers from firing"""
+        self.execute(
+            "INSERT OR REPLACE INTO sync_context (key, value) VALUES ('in_sync', 1)"
+        )
+        self.commit()
+
+    def exit_sync_context(self) -> None:
+        """Mark that sync operation is complete and triggers should fire normally"""
+        self.execute("DELETE FROM sync_context WHERE key = 'in_sync'")
+        self.commit()
+
 
 # Convenience functions
 _db_instance: Database | None = None

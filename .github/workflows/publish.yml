@@ -2,7 +2,7 @@ name: Publish to PyPI
 
 on:
   release:
-    types: [published, created]
+    types: [published]
 
 jobs:
   build:
@@ -84,4 +84,3 @@ jobs:
         run: |
           gh release upload '${{ github.event.release.tag_name }}' dist/** \
             --repo '${{ github.repository }}'
-

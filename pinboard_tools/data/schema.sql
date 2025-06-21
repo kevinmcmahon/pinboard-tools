@@ -120,10 +120,18 @@ LEFT JOIN bookmark_tags bt ON b.id = bt.bookmark_id
 LEFT JOIN tags t ON bt.tag_id = t.id
 GROUP BY b.id;
 
--- Triggers to track tag modifications for sync
+-- Sync context table to track when sync operations are in progress
+CREATE TABLE sync_context (
+    key TEXT PRIMARY KEY,
+    value INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Triggers to track tag modifications for sync (only when not during sync)
 CREATE TRIGGER track_tag_insertions
 AFTER INSERT ON bookmark_tags
 FOR EACH ROW
+WHEN NOT EXISTS (SELECT 1 FROM sync_context WHERE key = 'in_sync')
 BEGIN
     UPDATE bookmarks 
     SET tags_modified = 1,
@@ -135,6 +143,7 @@ END;
 CREATE TRIGGER track_tag_deletions
 AFTER DELETE ON bookmark_tags
 FOR EACH ROW
+WHEN NOT EXISTS (SELECT 1 FROM sync_context WHERE key = 'in_sync')
 BEGIN
     UPDATE bookmarks 
     SET tags_modified = 1,
