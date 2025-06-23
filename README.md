@@ -8,11 +8,11 @@ A Python library for syncing and managing Pinboard bookmarks.
 
 ## Features
 
-- **Bidirectional sync** with Pinboard.in API
-- **SQLite database** for local bookmark storage
+- **Efficient incremental sync** with Pinboard.in API
+- **SQLite database** for local bookmark storage  
 - **Tag analysis** and similarity detection
-- **Conflict resolution** for sync operations
-- **Rate limiting** to respect API limits
+- **Smart conflict resolution** for sync operations
+- **Rate limiting** and optimized API usage
 - **Chunking utilities** for LLM processing
 
 ## Installation
@@ -27,23 +27,21 @@ pip install pinboard-tools
 from pinboard_tools import (
     init_database,
     get_session,
-    PinboardAPI,
     BidirectionalSync,
 )
 
 # Initialize database
 init_database("bookmarks.db")
 
-# Set up API client
-api = PinboardAPI(api_token="your-pinboard-api-token")
-
 # Create sync engine
-with get_session() as session:
-    sync = BidirectionalSync(session, api)
-    
-    # Perform full sync
-    stats = sync.sync()
-    print(f"Added: {stats['added']}, Updated: {stats['updated']}")
+db = get_session()
+sync = BidirectionalSync(db=db, api_token="your-pinboard-api-token")
+
+# Perform efficient incremental sync
+stats = sync.sync()
+print(f"Local to remote: {stats['local_to_remote']}")
+print(f"Remote to local: {stats['remote_to_local']}")
+print(f"Conflicts resolved: {stats['conflicts_resolved']}")
 ```
 
 ## Core Components
@@ -57,8 +55,8 @@ with get_session() as session:
 
 ### Sync Engine
 
-- `PinboardAPI` - API client with rate limiting
-- `BidirectionalSync` - Full sync with conflict resolution
+- `PinboardAPI` - API client with rate limiting and incremental fetching
+- `BidirectionalSync` - Efficient incremental sync with conflict resolution
 
 ### Tag Analysis
 
@@ -98,12 +96,17 @@ with get_session() as session:
 ### Syncing
 
 ```python
-# Create API client
-api = PinboardAPI(api_token="your-token")
+# Create sync client  
+sync = BidirectionalSync(db=session, api_token="your-token")
 
-# Sync bookmarks
-sync = BidirectionalSync(session, api)
-stats = sync.sync(full_sync=False)
+# Efficient incremental sync (only fetches changed bookmarks)
+stats = sync.sync()
+
+# Sync only local changes to remote
+stats = sync.sync(direction=SyncDirection.LOCAL_TO_REMOTE)
+
+# Sync only remote changes to local
+stats = sync.sync(direction=SyncDirection.REMOTE_TO_LOCAL)
 ```
 
 ### Tag Analysis

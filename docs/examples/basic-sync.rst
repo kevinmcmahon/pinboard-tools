@@ -2,7 +2,7 @@
 Basic Sync
 ==========
 
-This example demonstrates basic synchronization between your local database and Pinboard.
+This example demonstrates efficient incremental synchronization between your local database and Pinboard.
 
 Setup
 =====
@@ -20,20 +20,31 @@ Setup
    # Create sync client with your API token
    sync = BidirectionalSync(db=db, api_token="your_username:your_api_token")
 
-Simple Sync
-===========
+Incremental Sync
+================
 
-Perform a basic bidirectional sync:
+Perform an efficient incremental bidirectional sync. The sync engine automatically:
+
+- Checks for remote changes using ``get_last_update()`` API call
+- Only fetches bookmarks changed since last sync (using ``fromdt`` parameter)
+- Skips sync entirely if no changes exist
+- Reports accurate change counts (not total bookmark collection size)
 
 .. code-block:: python
 
-   # Sync all changes
+   # Efficient incremental sync - only processes changed bookmarks
    results = sync.sync()
    
    print(f"Local to remote: {results['local_to_remote']} bookmarks")
-   print(f"Remote to local: {results['remote_to_local']} bookmarks")
+   print(f"Remote to local: {results['remote_to_local']} bookmarks")  
    print(f"Conflicts resolved: {results['conflicts_resolved']}")
    print(f"Errors: {results['errors']}")
+
+**Performance Benefits:**
+
+- Sync time scales with number of changes, not total bookmarks
+- Minimal API usage for large bookmark collections
+- Automatic early exit when no changes exist
 
 Dry Run
 =======

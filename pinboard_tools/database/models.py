@@ -150,7 +150,7 @@ class Database:
         """Initialize database schema from schema.sql file"""
         conn = self.connect()
 
-        # Access schema.sql as package data using modern importlib.resources API
+        # Always run the schema script (uses IF NOT EXISTS)
         try:
             files = pkg_resources.files("pinboard_tools.data")
             schema_sql = (files / "schema.sql").read_text(encoding="utf-8")
@@ -160,7 +160,60 @@ class Database:
             ) from e
 
         conn.executescript(schema_sql)
+
+        # Apply any needed migrations
+        self._apply_migrations(conn)
+
         conn.commit()
+
+    def _get_schema_version(self, conn: sqlite3.Connection) -> int:
+        """Get the current schema version"""
+        try:
+            cursor = conn.execute("SELECT version FROM schema_version")
+            result = cursor.fetchone()
+            return result["version"] if result else 0
+        except sqlite3.OperationalError:
+            return 0  # No version table = version 0
+
+    def _apply_migrations(self, conn: sqlite3.Connection) -> None:
+        """Apply database migrations based on current version"""
+        current_version = self._get_schema_version(conn)
+        target_version = 2  # Current schema version
+
+        if current_version >= target_version:
+            return  # Already up to date
+
+        # Migration from version 0 to 1: Add schema_version table (handled by schema.sql)
+        if current_version < 1:
+            # Insert version 1 for existing databases that had no version tracking
+            conn.execute("INSERT OR REPLACE INTO schema_version (version) VALUES (1)")
+            current_version = 1
+
+        # Migration from version 1 to 2: Add sync_metadata table
+        if current_version < 2:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS sync_metadata (
+                    key TEXT PRIMARY KEY,
+                    timestamp DATETIME NOT NULL,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Migrate existing sync data: find the most recent successful sync timestamp
+            cursor = conn.execute(
+                "SELECT MAX(last_synced_at) as last_sync FROM bookmarks WHERE last_synced_at IS NOT NULL"
+            )
+            result = cursor.fetchone()
+            if result and result["last_sync"]:
+                # Insert the last successful remote sync timestamp
+                conn.execute(
+                    "INSERT OR REPLACE INTO sync_metadata (key, timestamp) VALUES (?, ?)",
+                    ("last_remote_sync", result["last_sync"]),
+                )
+
+            # Update schema version
+            conn.execute("UPDATE schema_version SET version = 2")
+            current_version = 2
 
     def execute(self, query: str, params: tuple[object, ...] = ()) -> sqlite3.Cursor:
         """Execute a query and return cursor"""
@@ -342,3 +395,22 @@ def bookmark_with_tags(db: Database, bookmark_id: int) -> Bookmark | None:
     if row:
         return bookmark_from_row(dict(row))
     return None
+
+
+# Sync metadata utility functions
+def get_sync_metadata(db: Database, key: str) -> datetime | None:
+    """Get sync metadata timestamp by key"""
+    cursor = db.execute("SELECT timestamp FROM sync_metadata WHERE key = ?", (key,))
+    row = cursor.fetchone()
+    if row:
+        return datetime.fromisoformat(row["timestamp"])
+    return None
+
+
+def set_sync_metadata(db: Database, key: str, timestamp: datetime) -> None:
+    """Set sync metadata timestamp"""
+    db.execute(
+        "INSERT OR REPLACE INTO sync_metadata (key, timestamp) VALUES (?, ?)",
+        (key, timestamp.isoformat()),
+    )
+    db.commit()

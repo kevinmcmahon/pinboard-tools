@@ -1,8 +1,13 @@
 -- ABOUTME: SQLite schema for storing Pinboard bookmarks with normalized tags
 -- ABOUTME: Supports efficient tag-based searches and maintains all bookmark metadata
 
+-- Schema version tracking
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY
+);
+
 -- Main bookmarks table
-CREATE TABLE bookmarks (
+CREATE TABLE IF NOT EXISTS bookmarks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     href TEXT NOT NULL UNIQUE,
     description TEXT NOT NULL,
@@ -22,14 +27,14 @@ CREATE TABLE bookmarks (
 );
 
 -- Tags table for normalized tag storage
-CREATE TABLE tags (
+CREATE TABLE IF NOT EXISTS tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Junction table for many-to-many relationship between bookmarks and tags
-CREATE TABLE bookmark_tags (
+CREATE TABLE IF NOT EXISTS bookmark_tags (
     bookmark_id INTEGER NOT NULL,
     tag_id INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -39,7 +44,7 @@ CREATE TABLE bookmark_tags (
 );
 
 -- Tag merge history table
-CREATE TABLE tag_merges (
+CREATE TABLE IF NOT EXISTS tag_merges (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     old_tag TEXT NOT NULL,
     new_tag TEXT NOT NULL,
@@ -48,20 +53,20 @@ CREATE TABLE tag_merges (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_bookmarks_time ON bookmarks(time DESC);
-CREATE INDEX idx_bookmarks_href ON bookmarks(href);
-CREATE INDEX idx_bookmarks_hash ON bookmarks(hash);
-CREATE INDEX idx_bookmarks_toread ON bookmarks(toread) WHERE toread = 1;
-CREATE INDEX idx_bookmarks_tags_modified ON bookmarks(tags_modified) WHERE tags_modified = 1;
-CREATE INDEX idx_bookmarks_sync_status ON bookmarks(sync_status) WHERE sync_status IN ('pending_local', 'pending_remote', 'conflict');
-CREATE INDEX idx_tags_name ON tags(name);
-CREATE INDEX idx_bookmark_tags_tag_id ON bookmark_tags(tag_id);
-CREATE INDEX idx_bookmark_tags_bookmark_id ON bookmark_tags(bookmark_id);
-CREATE INDEX idx_tag_merges_old_tag ON tag_merges(old_tag);
-CREATE INDEX idx_tag_merges_new_tag ON tag_merges(new_tag);
+CREATE INDEX IF NOT EXISTS idx_bookmarks_time ON bookmarks(time DESC);
+CREATE INDEX IF NOT EXISTS idx_bookmarks_href ON bookmarks(href);
+CREATE INDEX IF NOT EXISTS idx_bookmarks_hash ON bookmarks(hash);
+CREATE INDEX IF NOT EXISTS idx_bookmarks_toread ON bookmarks(toread) WHERE toread = 1;
+CREATE INDEX IF NOT EXISTS idx_bookmarks_tags_modified ON bookmarks(tags_modified) WHERE tags_modified = 1;
+CREATE INDEX IF NOT EXISTS idx_bookmarks_sync_status ON bookmarks(sync_status) WHERE sync_status IN ('pending_local', 'pending_remote', 'conflict');
+CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
+CREATE INDEX IF NOT EXISTS idx_bookmark_tags_tag_id ON bookmark_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_bookmark_tags_bookmark_id ON bookmark_tags(bookmark_id);
+CREATE INDEX IF NOT EXISTS idx_tag_merges_old_tag ON tag_merges(old_tag);
+CREATE INDEX IF NOT EXISTS idx_tag_merges_new_tag ON tag_merges(new_tag);
 
 -- Full-text search support for bookmark content
-CREATE VIRTUAL TABLE bookmarks_fts USING fts5(
+CREATE VIRTUAL TABLE IF NOT EXISTS bookmarks_fts USING fts5(
     href,
     description,
     extended,
@@ -121,10 +126,17 @@ LEFT JOIN tags t ON bt.tag_id = t.id
 GROUP BY b.id;
 
 -- Sync context table to track when sync operations are in progress
-CREATE TABLE sync_context (
+CREATE TABLE IF NOT EXISTS sync_context (
     key TEXT PRIMARY KEY,
     value INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Sync metadata table to track last successful sync operations
+CREATE TABLE sync_metadata (
+    key TEXT PRIMARY KEY,
+    timestamp DATETIME NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Triggers to track tag modifications for sync (only when not during sync)
@@ -151,3 +163,6 @@ BEGIN
     WHERE id = OLD.bookmark_id
     AND sync_status = 'synced';
 END;
+
+-- Initialize schema version (only for new databases)
+INSERT OR IGNORE INTO schema_version (version) VALUES (2);

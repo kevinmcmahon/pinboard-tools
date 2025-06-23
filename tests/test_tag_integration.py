@@ -326,10 +326,12 @@ class TestTagNormalizationIntegration:
             bookmark_id = result.fetchone()["id"]
             bookmark_ids.append(bookmark_id)
 
-            # Assign 3-5 random tags to each bookmark
-            import random
-
-            bookmark_tags = random.sample(tag_pool, random.randint(3, 5))
+            # Assign 3-5 deterministic tags to each bookmark based on index
+            num_tags = 3 + (i % 3)  # Cycles through 3, 4, 5 tags
+            start_idx = (i * 2) % len(tag_pool)  # Deterministic starting position
+            bookmark_tags = [
+                tag_pool[(start_idx + j) % len(tag_pool)] for j in range(num_tags)
+            ]
             set_bookmark_tags(session, bookmark_id, bookmark_tags)
             session.commit()
 
