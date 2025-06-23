@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.abspath(".."))
 project = "Pinboard Tools"
 copyright = "2025, Kevin McMahon"
 author = "Kevin McMahon"
-release = "0.1.8"
+release = "0.1.9"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
