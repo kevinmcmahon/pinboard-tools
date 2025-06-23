@@ -1,93 +1,116 @@
-name: Create Release
+name: Release
 
 on:
-    workflow_dispatch:
-        inputs:
-            version_bump:
-                description: 'Version bump type'
-                required: true
-                default: 'patch'
-                type: choice
-                options:
-                    - patch
-                    - minor
-                    - major
-            prerelease:
-                description: 'Is this a pre-release?'
-                required: false
-                default: false
-                type: boolean
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      prerelease:
+        description: 'Is this a pre-release?'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
-    create-release:
-        name: Create Release
-        runs-on: ubuntu-latest
+  release:
+    name: Release
+    runs-on: ubuntu-latest
 
-        permissions:
-            contents: write
-            pull-requests: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pinboard-tools
 
-        steps:
-            - uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-                  token: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+      id-token: write # IMPORTANT: mandatory for trusted publishing
 
-            - name: Set up Python
-              uses: actions/setup-python@v5
-              with:
-                  python-version: '3.11'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
 
-            - name: Install bump-my-version
-              run: |
-                  pip install bump-my-version
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-            - name: Verify bump-my-version configuration
-              run: |
-                  bump-my-version show current_version || (echo "bump-my-version not properly configured" && exit 1)
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
-            - name: Get current version
-              id: current
-              run: |
-                  echo "version=$(bump-my-version show current_version)" >> "$GITHUB_OUTPUT"
+      - name: Install bump-my-version
+        run: |
+          pip install bump-my-version
 
-            - name: Bump version
-              id: bump
-              run: |
-                  # Configure git
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Verify bump-my-version configuration
+        run: |
+          bump-my-version show current_version || (echo "bump-my-version not properly configured" && exit 1)
 
-                  # Bump version (bump-my-version will update all configured files)
-                  bump-my-version bump ${{ github.event.inputs.version_bump }} --no-tag --no-commit --verbose
+      - name: Get current version
+        id: current
+        run: |
+          echo "version=$(bump-my-version show current_version)" >> "$GITHUB_OUTPUT"
 
-                  # Get new version (after bump, current_version reflects the new version)
-                  NEW_VERSION=$(bump-my-version show current_version)
-                  echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Bump version
+        id: bump
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-                  # Commit changes
-                  git add pyproject.toml pinboard_tools/__init__.py docs/conf.py
-                  git commit -m "chore: bump version from ${{ steps.current.outputs.version }} to $NEW_VERSION"
+          # Bump version (bump-my-version will update all configured files)
+          bump-my-version bump ${{ github.event.inputs.version_bump }} --no-tag --no-commit --verbose
 
-            - name: Push changes
-              run: |
-                  git push origin main
+          # Get new version (after bump, current_version reflects the new version)
+          NEW_VERSION=$(bump-my-version show current_version)
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
-            - name: Create Release
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-              run: |
-                  # Generate release notes
-                  PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-                  if [ -z "$PREVIOUS_TAG" ]; then
-                    NOTES="Initial release"
-                  else
-                    NOTES=$(git log --pretty=format:"- %s" ${PREVIOUS_TAG}..HEAD | grep -v "^- chore: bump version" || echo "No notable changes since last release")
-                  fi
+          # Commit changes
+          git add pyproject.toml pinboard_tools/__init__.py docs/conf.py
+          git commit -m "chore: bump version from ${{ steps.current.outputs.version }} to $NEW_VERSION"
 
-                  # Create release
-                  gh release create "v${{ steps.bump.outputs.new_version }}" \
-                    --title "v${{ steps.bump.outputs.new_version }}" \
-                    --notes "$NOTES" \
-                    --draft=false \
-                    ${{ github.event.inputs.prerelease == 'true' && '--prerelease' || '' }}
+      - name: Push changes
+        run: |
+          git push origin main
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Sign packages with Sigstore
+        uses: sigstore/gh-action-sigstore-python@v3.0.0
+        with:
+          inputs: >-
+            ./dist/*.tar.gz
+            ./dist/*.whl
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          # Generate release notes
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            NOTES="Initial release"
+          else
+            NOTES=$(git log --pretty=format:"- %s" ${PREVIOUS_TAG}..HEAD | grep -v "^- chore: bump version" || echo "No notable changes since last release")
+          fi
+
+          # Create release with all artifacts
+          gh release create "v${{ steps.bump.outputs.new_version }}" \
+            --title "v${{ steps.bump.outputs.new_version }}" \
+            --notes "$NOTES" \
+            --draft=false \
+            ${{ github.event.inputs.prerelease == 'true' && '--prerelease' || '' }} \
+            dist/*
