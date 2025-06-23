@@ -5,7 +5,13 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
-from ..database.models import Database, get_bookmark_tags_string, set_bookmark_tags
+from ..database.models import (
+    Database,
+    get_bookmark_tags_string,
+    get_sync_metadata,
+    set_bookmark_tags,
+    set_sync_metadata,
+)
 from ..utils.datetime import parse_boolean, parse_pinboard_time
 from .api import PinboardAPI
 
@@ -44,19 +50,36 @@ class BidirectionalSync:
         dry_run: bool = False,
     ) -> dict[str, Any]:
         """Perform sync operation"""
+        # Reset sync stats for this operation
+        self.sync_stats = {
+            "local_to_remote": 0,
+            "remote_to_local": 0,
+            "conflicts_resolved": 0,
+            "errors": 0,
+        }
+
         print(
             f"Starting sync - Direction: {direction.value}, Conflict Resolution: {conflict_resolution.value}"
         )
 
-        # Check if we need to sync
-        if not self._needs_sync(direction):
+        # Check what needs syncing
+        needs_local_sync = False
+        needs_remote_sync = False
+
+        if direction in [SyncDirection.BIDIRECTIONAL, SyncDirection.LOCAL_TO_REMOTE]:
+            needs_local_sync = self._needs_local_sync()
+
+        if direction in [SyncDirection.BIDIRECTIONAL, SyncDirection.REMOTE_TO_LOCAL]:
+            needs_remote_sync = self._needs_remote_sync()
+
+        if not needs_local_sync and not needs_remote_sync:
             print("No changes to sync")
             return self.sync_stats
 
-        if direction in [SyncDirection.BIDIRECTIONAL, SyncDirection.LOCAL_TO_REMOTE]:
+        if needs_local_sync:
             self._sync_local_to_remote(dry_run)
 
-        if direction in [SyncDirection.BIDIRECTIONAL, SyncDirection.REMOTE_TO_LOCAL]:
+        if needs_remote_sync:
             self._sync_remote_to_local(conflict_resolution, dry_run)
 
         # Update sync timestamps
@@ -66,32 +89,35 @@ class BidirectionalSync:
         print(f"\nSync complete: {self.sync_stats}")
         return self.sync_stats
 
-    def _needs_sync(self, direction: SyncDirection) -> bool:
-        """Check if sync is needed"""
-        # Check for local changes
-        if direction in [SyncDirection.BIDIRECTIONAL, SyncDirection.LOCAL_TO_REMOTE]:
-            cursor = self.db.execute(
-                "SELECT COUNT(*) as count FROM bookmarks WHERE sync_status != 'synced'"
-            )
-            if cursor.fetchone()["count"] > 0:
-                return True
-
-        # Check for remote changes
-        if direction in [SyncDirection.BIDIRECTIONAL, SyncDirection.REMOTE_TO_LOCAL]:
-            cursor = self.db.execute(
-                "SELECT MAX(last_synced_at) as last_sync FROM bookmarks"
-            )
-            last_sync = cursor.fetchone()["last_sync"]
-
-            if last_sync:
-                last_sync_dt = datetime.fromisoformat(last_sync)
-                last_update = self.api.get_last_update()
-                if last_update > last_sync_dt:
-                    return True
-            else:
-                return True  # No sync timestamp means we need initial sync
-
+    def _needs_local_sync(self) -> bool:
+        """Check if local changes need to be synced to remote"""
+        cursor = self.db.execute(
+            "SELECT COUNT(*) as count FROM bookmarks WHERE sync_status != 'synced'"
+        )
+        local_changes = cursor.fetchone()["count"]
+        if local_changes > 0:
+            print(f"Found {local_changes} local changes to sync")
+            return True
         return False
+
+    def _needs_remote_sync(self) -> bool:
+        """Check if remote changes need to be synced to local"""
+        # Get last successful remote sync from sync metadata
+        last_sync_dt = get_sync_metadata(self.db, "last_remote_sync")
+
+        if last_sync_dt:
+            last_update = self.api.get_last_update()
+            if last_update > last_sync_dt:
+                print(
+                    f"Remote changes detected (last update: {last_update.isoformat()}, last sync: {last_sync_dt.isoformat()})"
+                )
+                return True
+            else:
+                print(f"No remote changes since last sync ({last_sync_dt.isoformat()})")
+                return False
+        else:
+            print("No previous sync detected - performing initial sync")
+            return True
 
     def _sync_local_to_remote(self, dry_run: bool) -> None:
         """Sync local changes to Pinboard"""
@@ -136,9 +162,15 @@ class BidirectionalSync:
         self, conflict_resolution: ConflictResolution, dry_run: bool
     ) -> None:
         """Sync remote changes to local database"""
-        # Get all posts from Pinboard
-        print("Fetching all posts from Pinboard...")
-        remote_posts = self.api.get_all_posts()
+        # Get last sync time from sync metadata to fetch only changed posts
+        last_sync_dt = get_sync_metadata(self.db, "last_remote_sync")
+
+        if last_sync_dt:
+            print(f"Fetching posts changed since {last_sync_dt.isoformat()}...")
+            remote_posts = self.api.get_all_posts(fromdt=last_sync_dt)
+        else:
+            print("Fetching all posts from Pinboard (initial sync)...")
+            remote_posts = self.api.get_all_posts()
 
         # Build lookup of local bookmarks by hash
         cursor = self.db.execute(
@@ -161,10 +193,12 @@ class BidirectionalSync:
                         # Conflict!
                         self._handle_conflict(local, post, conflict_resolution, dry_run)
                     else:
-                        # Update local with remote changes
-                        if not dry_run:
-                            self._update_bookmark_from_remote(post)
-                        self.sync_stats["remote_to_local"] += 1
+                        # Check if the remote bookmark has actually changed
+                        if self._bookmark_needs_update(local, post):
+                            # Update local with remote changes
+                            if not dry_run:
+                                self._update_bookmark_from_remote(post)
+                            self.sync_stats["remote_to_local"] += 1
                 else:
                     # New bookmark from remote
                     if not dry_run:
@@ -289,11 +323,57 @@ class BidirectionalSync:
         # Use utility function to set tags
         set_bookmark_tags(self.db, bookmark_id, tags)
 
+    def _bookmark_needs_update(
+        self, local: dict[str, Any], remote: dict[str, Any]
+    ) -> bool:
+        """Check if a remote bookmark has changes that need to be applied locally"""
+        # Compare key fields to see if they differ
+        remote_time = parse_pinboard_time(remote["time"])
+        local_time = None
+        if local.get("updated_at"):
+            local_time = datetime.fromisoformat(local["updated_at"])
+            # Ensure both datetimes have timezone info for comparison
+            if local_time.tzinfo is None:
+                local_time = local_time.replace(tzinfo=UTC)
+
+        # If remote is newer, it needs updating
+        if local_time and remote_time > local_time:
+            return True
+
+        # Check if basic fields differ
+        if (
+            remote.get("href") != local.get("href")
+            or remote.get("description") != local.get("description")
+            or remote.get("extended", "") != local.get("extended", "")
+            or parse_boolean(remote.get("shared", "yes"))
+            != bool(local.get("shared", True))
+            or parse_boolean(remote.get("toread", "no"))
+            != bool(local.get("toread", False))
+        ):
+            return True
+
+        # Get local tags and compare with remote tags
+        local_tags = get_bookmark_tags_string(self.db, local["id"])
+        remote_tags = remote.get("tags", "")
+
+        # Normalize tag strings for comparison (split, sort, rejoin)
+        local_tags_normalized = " ".join(sorted(local_tags.split()))
+        remote_tags_normalized = " ".join(sorted(remote_tags.split()))
+
+        return local_tags_normalized != remote_tags_normalized
+
     def _update_sync_timestamps(self) -> None:
-        """Update last sync timestamp for all synced bookmarks"""
-        now = datetime.now(UTC).isoformat()
+        """Update last sync timestamp for all synced bookmarks and sync metadata"""
+        now = datetime.now(UTC)
+        now_iso = now.isoformat()
+
         self.db.execute(
             "UPDATE bookmarks SET last_synced_at = ? WHERE sync_status = 'synced'",
-            (now,),
+            (now_iso,),
         )
+
+        # Update sync metadata to record successful remote sync
+        if self.sync_stats["remote_to_local"] > 0:
+            set_sync_metadata(self.db, "last_remote_sync", now)
+
         self.db.commit()
