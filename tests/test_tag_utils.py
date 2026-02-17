@@ -57,7 +57,7 @@ class TestTagUtilities:
         self, temp_db_with_bookmark: tuple[str, int]
     ) -> None:
         """Test basic tag setting functionality."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Set some tags
@@ -88,7 +88,7 @@ class TestTagUtilities:
         self, temp_db_with_bookmark: tuple[str, int]
     ) -> None:
         """Test tag normalization during setting."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Set tags with various formatting issues
@@ -114,7 +114,7 @@ class TestTagUtilities:
         self, temp_db_with_bookmark: tuple[str, int]
     ) -> None:
         """Test that setting tags replaces existing tags."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Set initial tags
@@ -149,7 +149,7 @@ class TestTagUtilities:
 
     def test_get_bookmark_tags(self, temp_db_with_bookmark: tuple[str, int]) -> None:
         """Test getting bookmark tags as a list."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Set up tags
@@ -165,7 +165,7 @@ class TestTagUtilities:
         self, temp_db_with_bookmark: tuple[str, int]
     ) -> None:
         """Test getting tags for bookmark with no tags."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Don't set any tags
@@ -176,7 +176,7 @@ class TestTagUtilities:
         self, temp_db_with_bookmark: tuple[str, int]
     ) -> None:
         """Test getting bookmark tags as space-separated string."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Set up tags
@@ -193,7 +193,7 @@ class TestTagUtilities:
         self, temp_db_with_bookmark: tuple[str, int]
     ) -> None:
         """Test getting tags string for bookmark with no tags."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Don't set any tags
@@ -202,7 +202,7 @@ class TestTagUtilities:
 
     def test_bookmark_with_tags(self, temp_db_with_bookmark: tuple[str, int]) -> None:
         """Test getting bookmark with tags populated."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Set up tags
@@ -222,7 +222,7 @@ class TestTagUtilities:
         self, temp_db_with_bookmark: tuple[str, int]
     ) -> None:
         """Test getting non-existent bookmark returns None."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, _bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Try to get non-existent bookmark
@@ -233,7 +233,7 @@ class TestTagUtilities:
         self, temp_db_with_bookmark: tuple[str, int]
     ) -> None:
         """Test that multiple bookmarks can share the same tags efficiently."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Create another bookmark
@@ -280,7 +280,7 @@ class TestTagUtilities:
 
     def test_set_empty_tags(self, temp_db_with_bookmark: tuple[str, int]) -> None:
         """Test setting empty tag list clears all tags."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Set initial tags
@@ -304,7 +304,7 @@ class TestTagUtilities:
         self, temp_db_with_bookmark: tuple[str, int]
     ) -> None:
         """Test that tag changes trigger sync status updates."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Verify initial sync status
@@ -330,7 +330,7 @@ class TestTagUtilities:
         self, temp_db_with_bookmark: tuple[str, int]
     ) -> None:
         """Test that concurrent tag operations work correctly."""
-        db_path, bookmark_id = temp_db_with_bookmark
+        _, bookmark_id = temp_db_with_bookmark
         session = get_session()
 
         # Create multiple bookmarks

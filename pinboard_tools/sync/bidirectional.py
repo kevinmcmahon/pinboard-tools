@@ -97,7 +97,7 @@ class BidirectionalSync:
         cursor = self.db.execute(
             "SELECT COUNT(*) as count FROM bookmarks WHERE sync_status = 'error'"
         )
-        count = cursor.fetchone()["count"]
+        count: int = cursor.fetchone()["count"]
 
         if count > 0:
             self.db.execute(

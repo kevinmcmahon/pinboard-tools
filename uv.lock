@@ -549,6 +549,7 @@ dev = [
 [package.dev-dependencies]
 dev = [
     { name = "isort" },
+    { name = "mypy" },
     { name = "pytest" },
     { name = "sphinx" },
     { name = "sphinx-autodoc-typehints" },
@@ -572,6 +573,7 @@ provides-extras = ["dev", "cli"]
 [package.metadata.requires-dev]
 dev = [
     { name = "isort", specifier = ">=6.0.1" },
+    { name = "mypy", specifier = ">=1.16.0" },
     { name = "pytest", specifier = ">=8.4.0" },
     { name = "sphinx", specifier = ">=8.2.3" },
     { name = "sphinx-autodoc-typehints", specifier = ">=3.2.0" },

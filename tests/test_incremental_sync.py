@@ -80,7 +80,7 @@ class TestIncrementalSync:
         self, mock_api_class: Mock, temp_db_with_sync_history: tuple[str, Database]
     ) -> None:
         """Test that sync is skipped when no changes exist."""
-        db_path, session = temp_db_with_sync_history
+        _, session = temp_db_with_sync_history
 
         # Setup mock API
         mock_api = Mock()
@@ -118,7 +118,7 @@ class TestIncrementalSync:
         self, mock_api_class: Mock, temp_db_with_sync_history: tuple[str, Database]
     ) -> None:
         """Test that incremental sync uses fromdt parameter correctly."""
-        db_path, session = temp_db_with_sync_history
+        _, session = temp_db_with_sync_history
 
         # Setup mock API
         mock_api = Mock()
@@ -206,7 +206,7 @@ class TestIncrementalSync:
         self, mock_api_class: Mock, temp_db_with_sync_history: tuple[str, Database]
     ) -> None:
         """Test that sync reports accurate change counts, not total bookmark counts."""
-        db_path, session = temp_db_with_sync_history
+        _, session = temp_db_with_sync_history
 
         # Setup mock API
         mock_api = Mock()
@@ -268,7 +268,7 @@ class TestIncrementalSync:
         self, mock_api_class: Mock, temp_db_with_sync_history: tuple[str, Database]
     ) -> None:
         """Test bidirectional sync handles both local and remote changes efficiently."""
-        db_path, session = temp_db_with_sync_history
+        _, session = temp_db_with_sync_history
 
         # Setup mock API
         mock_api = Mock()
@@ -324,7 +324,7 @@ class TestIncrementalSync:
         self, mock_api_class: Mock, temp_db_with_sync_history: tuple[str, Database]
     ) -> None:
         """Test that sync handles API errors without breaking."""
-        db_path, session = temp_db_with_sync_history
+        _, session = temp_db_with_sync_history
 
         # Setup mock API with error
         mock_api = Mock()
