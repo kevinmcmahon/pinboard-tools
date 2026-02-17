@@ -8,10 +8,14 @@ A Python library for syncing and managing Pinboard bookmarks.
 
 ## Features
 
-- **Efficient incremental sync** with Pinboard.in API
-- **SQLite database** for local bookmark storage  
+- **Efficient incremental sync** with Pinboard.in API (only fetches changed bookmarks)
+- **Bidirectional sync** with configurable conflict resolution strategies
+- **SQLite database** with normalized tag storage and full-text search
+- **Thread-safe** database singleton with proper locking
+- **Error recovery** for failed sync operations with retry support
 - **Tag analysis** and similarity detection
-- **Smart conflict resolution** for sync operations
+- **Tag consolidation** for merging duplicate tags
+- **Exponential backoff** on API rate limits with max retry protection
 - **Rate limiting** and optimized API usage
 - **Chunking utilities** for LLM processing
 
@@ -51,12 +55,12 @@ print(f"Conflicts resolved: {stats['conflicts_resolved']}")
 - `Bookmark` - Bookmark entity with all Pinboard fields
 - `Tag` - Tag entity with normalization
 - `BookmarkTag` - Many-to-many relationship
-- `SyncStatus` - Track sync state
+- `SyncStatus` - Track sync state (`synced`, `pending_local`, `pending_remote`, `conflict`, `error`)
 
 ### Sync Engine
 
-- `PinboardAPI` - API client with rate limiting and incremental fetching
-- `BidirectionalSync` - Efficient incremental sync with conflict resolution
+- `PinboardAPI` - API client with rate limiting, exponential backoff, and JSON error handling
+- `BidirectionalSync` - Efficient incremental sync with conflict resolution and error recovery
 
 ### Tag Analysis
 
@@ -70,14 +74,17 @@ print(f"Conflicts resolved: {stats['conflicts_resolved']}")
 
 ## Database Schema
 
-The library uses a normalized SQLite schema:
+The library uses a normalized SQLite schema with full-text search:
 
 ```sql
--- See schema.sql for complete structure
-bookmarks (url, title, description, tags, time, ...)
-tags (name, normalized_name)
+-- Core tables (see pinboard_tools/data/schema.sql for complete structure)
+bookmarks (href, description, extended, hash, time, sync_status, ...)
+tags (name)
 bookmark_tags (bookmark_id, tag_id)
-sync_status (last_sync, last_update)
+sync_metadata (key, timestamp)
+
+-- Convenience view
+bookmarks_with_tags  -- joins bookmarks with their tags as space-separated string
 ```
 
 ## API Reference
@@ -96,7 +103,7 @@ with get_session() as session:
 ### Syncing
 
 ```python
-# Create sync client  
+# Create sync client
 sync = BidirectionalSync(db=session, api_token="your-token")
 
 # Efficient incremental sync (only fetches changed bookmarks)
@@ -107,6 +114,11 @@ stats = sync.sync(direction=SyncDirection.LOCAL_TO_REMOTE)
 
 # Sync only remote changes to local
 stats = sync.sync(direction=SyncDirection.REMOTE_TO_LOCAL)
+
+# Retry bookmarks that previously failed to sync
+retried = sync.retry_failed_bookmarks()
+if retried > 0:
+    stats = sync.sync()  # re-sync the retried bookmarks
 ```
 
 ### Tag Analysis

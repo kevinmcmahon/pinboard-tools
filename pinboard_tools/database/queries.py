@@ -34,7 +34,7 @@ def get_recent_bookmarks(db: Database, limit: int = 10) -> list[dict[str, Any]]:
     cursor = db.execute(
         """
         SELECT hash, href, description, time, tags
-        FROM bookmarks
+        FROM bookmarks_with_tags
         ORDER BY time DESC
         LIMIT ?
     """,
@@ -49,7 +49,7 @@ def get_unread_bookmarks(
     """Get bookmarks marked as unread"""
     query = """
         SELECT hash, href, description, time, tags
-        FROM bookmarks
+        FROM bookmarks_with_tags
         WHERE toread = 1
         ORDER BY time DESC
     """
@@ -67,12 +67,15 @@ def get_bookmarks_by_tag(db: Database, tag_name: str) -> list[dict[str, Any]]:
     """Get all bookmarks with a specific tag"""
     cursor = db.execute(
         """
-        SELECT b.hash, b.href, b.description, b.time, b.tags
-        FROM bookmarks b
-        JOIN bookmark_tags bt ON b.id = bt.bookmark_id
-        JOIN tags t ON bt.tag_id = t.id
-        WHERE t.name = ?
-        ORDER BY b.time DESC
+        SELECT bwt.hash, bwt.href, bwt.description, bwt.time, bwt.tags
+        FROM bookmarks_with_tags bwt
+        WHERE bwt.id IN (
+            SELECT bt.bookmark_id
+            FROM bookmark_tags bt
+            JOIN tags t ON bt.tag_id = t.id
+            WHERE t.name = ?
+        )
+        ORDER BY bwt.time DESC
     """,
         (tag_name,),
     )
@@ -87,16 +90,17 @@ def get_modified_bookmarks(
         cursor = db.execute(
             """
             SELECT id, hash, href, description, tags, sync_status, updated_at
-            FROM bookmarks
+            FROM bookmarks_with_tags
             WHERE sync_status = ?
             ORDER BY updated_at DESC
         """,
             (status,),
         )
     else:
+        # Includes all non-synced statuses (pending, conflict, error) for status display
         cursor = db.execute("""
             SELECT id, hash, href, description, tags, sync_status, updated_at
-            FROM bookmarks
+            FROM bookmarks_with_tags
             WHERE sync_status != 'synced'
             ORDER BY updated_at DESC
         """)
@@ -109,7 +113,7 @@ def search_bookmarks(db: Database, query: str) -> list[dict[str, Any]]:
     cursor = db.execute(
         """
         SELECT hash, href, description, time, tags
-        FROM bookmarks
+        FROM bookmarks_with_tags
         WHERE description LIKE ? OR href LIKE ? OR extended LIKE ?
         ORDER BY time DESC
     """,

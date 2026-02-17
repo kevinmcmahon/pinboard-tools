@@ -31,6 +31,17 @@ cli = ["rich>=13.7.0"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["pinboard_tools"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "pinboard_tools/",
+    "tests/",
+    "README.md",
+    "LICENSE",
+]
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"
@@ -94,6 +105,7 @@ replace = 'release = "{new_version}"'
 [dependency-groups]
 dev = [
     "isort>=6.0.1",
+    "pytest>=8.4.0",
     "sphinx>=8.2.3",
     "sphinx-autodoc-typehints>=3.2.0",
     "sphinx-rtd-theme>=3.0.2",

@@ -58,7 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_bookmarks_href ON bookmarks(href);
 CREATE INDEX IF NOT EXISTS idx_bookmarks_hash ON bookmarks(hash);
 CREATE INDEX IF NOT EXISTS idx_bookmarks_toread ON bookmarks(toread) WHERE toread = 1;
 CREATE INDEX IF NOT EXISTS idx_bookmarks_tags_modified ON bookmarks(tags_modified) WHERE tags_modified = 1;
-CREATE INDEX IF NOT EXISTS idx_bookmarks_sync_status ON bookmarks(sync_status) WHERE sync_status IN ('pending_local', 'pending_remote', 'conflict');
+CREATE INDEX IF NOT EXISTS idx_bookmarks_sync_status ON bookmarks(sync_status) WHERE sync_status IN ('pending_local', 'pending_remote', 'conflict', 'error');
 CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
 CREATE INDEX IF NOT EXISTS idx_bookmark_tags_tag_id ON bookmark_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_bookmark_tags_bookmark_id ON bookmark_tags(bookmark_id);
@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS sync_context (
 );
 
 -- Sync metadata table to track last successful sync operations
-CREATE TABLE sync_metadata (
+CREATE TABLE IF NOT EXISTS sync_metadata (
     key TEXT PRIMARY KEY,
     timestamp DATETIME NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

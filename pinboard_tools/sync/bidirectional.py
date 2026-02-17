@@ -89,10 +89,30 @@ class BidirectionalSync:
         print(f"\nSync complete: {self.sync_stats}")
         return self.sync_stats
 
+    def retry_failed_bookmarks(self) -> int:
+        """Reset error'd bookmarks to pending_local so they can be retried on next sync.
+
+        Returns the number of bookmarks reset.
+        """
+        cursor = self.db.execute(
+            "SELECT COUNT(*) as count FROM bookmarks WHERE sync_status = 'error'"
+        )
+        count = cursor.fetchone()["count"]
+
+        if count > 0:
+            self.db.execute(
+                "UPDATE bookmarks SET sync_status = 'pending_local' WHERE sync_status = 'error'"
+            )
+            self.db.commit()
+            print(f"Reset {count} error'd bookmarks to pending_local for retry")
+
+        return count
+
     def _needs_local_sync(self) -> bool:
         """Check if local changes need to be synced to remote"""
+        # Only count actionable statuses, not 'error' (which requires explicit retry)
         cursor = self.db.execute(
-            "SELECT COUNT(*) as count FROM bookmarks WHERE sync_status != 'synced'"
+            "SELECT COUNT(*) as count FROM bookmarks WHERE sync_status IN ('pending_local', 'pending_remote', 'conflict')"
         )
         local_changes = cursor.fetchone()["count"]
         if local_changes > 0:
@@ -119,44 +139,79 @@ class BidirectionalSync:
             print("No previous sync detected - performing initial sync")
             return True
 
+    def _mark_bookmarks_synced(self, bookmark_ids: list[int]) -> None:
+        """Mark bookmarks as synced in the database"""
+        if not bookmark_ids:
+            return
+        now_iso = datetime.now(UTC).isoformat()
+        for bookmark_id in bookmark_ids:
+            self.db.execute(
+                "UPDATE bookmarks SET sync_status = 'synced', last_synced_at = ? WHERE id = ?",
+                (now_iso, bookmark_id),
+            )
+
+    def _mark_bookmarks_error(
+        self, bookmarks: list[dict[str, Any]], exclude_ids: list[int]
+    ) -> None:
+        """Mark bookmarks as error, excluding already-synced ones"""
+        for bookmark in bookmarks:
+            if bookmark["id"] not in exclude_ids:
+                self.db.execute(
+                    "UPDATE bookmarks SET sync_status = 'error' WHERE id = ?",
+                    (bookmark["id"],),
+                )
+
     def _sync_local_to_remote(self, dry_run: bool) -> None:
         """Sync local changes to Pinboard"""
         cursor = self.db.execute(
             "SELECT * FROM bookmarks WHERE sync_status = 'pending_local'"
         )
+        bookmarks = [dict(row) for row in cursor]
 
-        for row in cursor:
-            bookmark = dict(row)
-            print(f"Syncing to remote: {bookmark['href'][:50]}...")
-
-            if not dry_run:
-                try:
-                    # Get tags from normalized tables
-                    tags_string = get_bookmark_tags_string(self.db, bookmark["id"])
-
-                    success = self.api.add_post(
-                        url=bookmark["href"],
-                        description=bookmark["description"],
-                        extended=bookmark["extended"] or "",
-                        tags=tags_string,
-                        dt=datetime.fromisoformat(bookmark["time"]),
-                        shared="yes" if bookmark["shared"] else "no",
-                        toread="yes" if bookmark["toread"] else "no",
-                    )
-
-                    if success:
-                        self.db.execute(
-                            "UPDATE bookmarks SET sync_status = 'synced', last_synced_at = ? WHERE id = ?",
-                            (datetime.now(UTC).isoformat(), bookmark["id"]),
-                        )
-                        self.sync_stats["local_to_remote"] += 1
-                    else:
-                        self.sync_stats["errors"] += 1
-                except Exception as e:
-                    print(f"Error syncing {bookmark['href']}: {e}")
-                    self.sync_stats["errors"] += 1
-            else:
+        if dry_run:
+            for bookmark in bookmarks:
+                print(f"Would sync to remote: {bookmark['href'][:50]}...")
                 self.sync_stats["local_to_remote"] += 1
+            return
+
+        synced_ids: list[int] = []
+        try:
+            for bookmark in bookmarks:
+                print(f"Syncing to remote: {bookmark['href'][:50]}...")
+
+                tags_string = get_bookmark_tags_string(self.db, bookmark["id"])
+                success = self.api.add_post(
+                    url=bookmark["href"],
+                    description=bookmark["description"],
+                    extended=bookmark["extended"] or "",
+                    tags=tags_string,
+                    dt=datetime.fromisoformat(bookmark["time"]),
+                    shared="yes" if bookmark["shared"] else "no",
+                    toread="yes" if bookmark["toread"] else "no",
+                )
+
+                if success:
+                    synced_ids.append(bookmark["id"])
+                    self.sync_stats["local_to_remote"] += 1
+                else:
+                    print(f"Failed to sync bookmark {bookmark['href']}")
+                    self.db.execute(
+                        "UPDATE bookmarks SET sync_status = 'error' WHERE id = ?",
+                        (bookmark["id"],),
+                    )
+                    self.db.commit()
+                    self.sync_stats["errors"] += 1
+
+            self._mark_bookmarks_synced(synced_ids)
+            self.db.commit()
+
+        except Exception as e:
+            print(f"Error during sync: {e}")
+            self._mark_bookmarks_synced(synced_ids)
+            self._mark_bookmarks_error(bookmarks, synced_ids)
+            self.db.commit()
+            self.sync_stats["errors"] += len(bookmarks) - len(synced_ids)
+            raise
 
     def _sync_remote_to_local(
         self, conflict_resolution: ConflictResolution, dry_run: bool

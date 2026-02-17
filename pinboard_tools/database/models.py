@@ -3,6 +3,7 @@
 
 import importlib.resources as pkg_resources
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -16,6 +17,7 @@ class SyncStatus(Enum):
     PENDING_LOCAL = "pending_local"
     PENDING_REMOTE = "pending_remote"
     CONFLICT = "conflict"
+    ERROR = "error"
 
 
 @dataclass
@@ -183,37 +185,51 @@ class Database:
         if current_version >= target_version:
             return  # Already up to date
 
-        # Migration from version 0 to 1: Add schema_version table (handled by schema.sql)
-        if current_version < 1:
-            # Insert version 1 for existing databases that had no version tracking
-            conn.execute("INSERT OR REPLACE INTO schema_version (version) VALUES (1)")
-            current_version = 1
-
-        # Migration from version 1 to 2: Add sync_metadata table
-        if current_version < 2:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS sync_metadata (
-                    key TEXT PRIMARY KEY,
-                    timestamp DATETIME NOT NULL,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-
-            # Migrate existing sync data: find the most recent successful sync timestamp
-            cursor = conn.execute(
-                "SELECT MAX(last_synced_at) as last_sync FROM bookmarks WHERE last_synced_at IS NOT NULL"
-            )
-            result = cursor.fetchone()
-            if result and result["last_sync"]:
-                # Insert the last successful remote sync timestamp
+        try:
+            # Migration from version 0 to 1: Add schema_version table (handled by schema.sql)
+            if current_version < 1:
+                print(f"Migrating database from version {current_version} to 1...")
+                # Insert version 1 for existing databases that had no version tracking
                 conn.execute(
-                    "INSERT OR REPLACE INTO sync_metadata (key, timestamp) VALUES (?, ?)",
-                    ("last_remote_sync", result["last_sync"]),
+                    "INSERT OR REPLACE INTO schema_version (version) VALUES (1)"
                 )
+                current_version = 1
+                print("Migration to version 1 complete")
 
-            # Update schema version
-            conn.execute("UPDATE schema_version SET version = 2")
-            current_version = 2
+            # Migration from version 1 to 2: Add sync_metadata table
+            if current_version < 2:
+                print(f"Migrating database from version {current_version} to 2...")
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS sync_metadata (
+                        key TEXT PRIMARY KEY,
+                        timestamp DATETIME NOT NULL,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+
+                # Migrate existing sync data: find the most recent successful sync timestamp
+                cursor = conn.execute(
+                    "SELECT MAX(last_synced_at) as last_sync FROM bookmarks WHERE last_synced_at IS NOT NULL"
+                )
+                result = cursor.fetchone()
+                if result and result["last_sync"]:
+                    # Insert the last successful remote sync timestamp
+                    conn.execute(
+                        "INSERT OR REPLACE INTO sync_metadata (key, timestamp) VALUES (?, ?)",
+                        ("last_remote_sync", result["last_sync"]),
+                    )
+
+                # Update schema version
+                conn.execute("UPDATE schema_version SET version = 2")
+                current_version = 2
+                print("Migration to version 2 complete")
+
+        except sqlite3.Error as e:
+            print(f"Migration failed from version {current_version}: {e}")
+            conn.rollback()
+            raise sqlite3.DatabaseError(
+                f"Failed to migrate database from version {current_version}: {e}"
+            ) from e
 
     def execute(self, query: str, params: tuple[object, ...] = ()) -> sqlite3.Cursor:
         """Execute a query and return cursor"""
@@ -268,20 +284,30 @@ class Database:
 
 # Convenience functions
 _db_instance: Database | None = None
+_db_lock = threading.Lock()
+
+
+def _init_database_unlocked(db_path: str = "bookmarks.db") -> None:
+    """Initialize the database without acquiring the lock (caller must hold _db_lock)"""
+    global _db_instance
+    _db_instance = Database(db_path)
+    _db_instance.init_schema()
 
 
 def init_database(db_path: str = "bookmarks.db") -> None:
     """Initialize the database with schema"""
-    global _db_instance
-    _db_instance = Database(db_path)
-    _db_instance.init_schema()
+    with _db_lock:
+        _init_database_unlocked(db_path)
 
 
 def get_session() -> Database:
     """Get the current database session"""
     global _db_instance
     if _db_instance is None:
-        init_database()
+        with _db_lock:
+            # Double-check locking pattern
+            if _db_instance is None:
+                _init_database_unlocked()
     assert _db_instance is not None
     return _db_instance
 

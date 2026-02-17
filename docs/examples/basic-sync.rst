@@ -84,14 +84,29 @@ Handle sync errors gracefully:
 
    try:
        results = sync.sync()
-       
+
        if results['errors'] > 0:
            print(f"Warning: {results['errors']} errors occurred during sync")
        else:
            print("Sync completed successfully!")
-           
+
    except Exception as e:
        print(f"Sync failed: {e}")
+
+Retrying Failed Bookmarks
+=========================
+
+Bookmarks that fail to sync are marked with ``error`` status. Use
+``retry_failed_bookmarks()`` to reset them for retry on the next sync:
+
+.. code-block:: python
+
+   # Check for and retry any previously failed bookmarks
+   retried = sync.retry_failed_bookmarks()
+   if retried > 0:
+       print(f"Retrying {retried} previously failed bookmarks...")
+       results = sync.sync()
+       print(f"Retry results: {results}")
 
 Complete Example
 ================
@@ -147,9 +162,14 @@ Complete Example
                print("\\n✅ Sync completed successfully!")
            else:
                print(f"\\n⚠️  Sync completed with {results['errors']} errors")
-               
+               print("Run with retry_failed_bookmarks() to retry failed items")
+
        except Exception as e:
            print(f"\\n❌ Sync failed: {e}")
+           # Retry any bookmarks that were partially synced
+           retried = sync.retry_failed_bookmarks()
+           if retried > 0:
+               print(f"Reset {retried} failed bookmarks for retry on next run")
            sys.exit(1)
 
    if __name__ == "__main__":

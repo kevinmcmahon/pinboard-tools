@@ -1,6 +1,7 @@
 # ABOUTME: Pinboard API client with rate limiting and error handling
 # ABOUTME: Provides functions for interacting with the Pinboard.in API
 
+import json
 import time
 from datetime import datetime
 from typing import Any
@@ -35,7 +36,13 @@ class PinboardAPI:
             time.sleep(self.min_request_interval - elapsed)
         self.last_request_time = time.time()
 
-    def _make_request(self, endpoint: str, params: dict[str, str] | None = None) -> Any:
+    def _make_request(
+        self,
+        endpoint: str,
+        params: dict[str, str] | None = None,
+        retry_count: int = 0,
+        max_retries: int = 3,
+    ) -> Any:
         """Make API request with rate limiting and error handling"""
         self._rate_limit()
 
@@ -55,11 +62,27 @@ class PinboardAPI:
             )
             response.raise_for_status()
             return response.json()
+        except json.JSONDecodeError as e:
+            raise PinboardAPIError(
+                f"Invalid JSON response from API: {e}. Response text: {response.text[:200]}"
+            ) from e
         except requests.exceptions.HTTPError as e:
             if e.response and e.response.status_code == 429:  # Too Many Requests
-                print("Rate limit exceeded. Waiting 60 seconds...")
-                time.sleep(60)
-                return self._make_request(endpoint, params)
+                if retry_count >= max_retries:
+                    raise PinboardAPIError(
+                        f"Max retries ({max_retries}) exceeded for rate limiting"
+                    ) from e
+
+                # Exponential backoff: 60s, 120s, 240s
+                wait_time = 60 * (2**retry_count)
+                print(
+                    f"Rate limit exceeded. Waiting {wait_time} seconds... "
+                    f"(retry {retry_count + 1}/{max_retries})"
+                )
+                time.sleep(wait_time)
+                return self._make_request(
+                    endpoint, params, retry_count + 1, max_retries
+                )
             raise PinboardAPIError(f"HTTP error: {e}") from e
         except requests.exceptions.ConnectionError as e:
             raise PinboardAPIError(f"Connection error: {e}") from e
