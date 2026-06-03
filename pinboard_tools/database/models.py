@@ -341,24 +341,6 @@ def bookmark_from_row(row: dict[str, Any] | BookmarkRow) -> Bookmark:
     )
 
 
-def tag_from_row(row: dict[str, Any] | TagRow) -> Tag:
-    """Convert database row to Tag dataclass"""
-    return Tag(
-        id=row.get("id"),
-        name=row.get("name", ""),
-        created_at=row.get("created_at"),
-    )
-
-
-def bookmark_tag_from_row(row: dict[str, Any] | BookmarkTagRow) -> BookmarkTag:
-    """Convert database row to BookmarkTag dataclass"""
-    return BookmarkTag(
-        bookmark_id=row["bookmark_id"],
-        tag_id=row["tag_id"],
-        created_at=row.get("created_at"),
-    )
-
-
 # Tag utility functions
 def get_bookmark_tags(db: Database, bookmark_id: int) -> list[str]:
     """Get tags for a bookmark as a list of strings"""

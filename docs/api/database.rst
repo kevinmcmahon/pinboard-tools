@@ -75,10 +75,6 @@ Helper Functions
 
 .. autofunction:: pinboard_tools.database.models.bookmark_from_row
 
-.. autofunction:: pinboard_tools.database.models.tag_from_row
-
-.. autofunction:: pinboard_tools.database.models.bookmark_tag_from_row
-
 Tag Utility Functions
 =====================
 

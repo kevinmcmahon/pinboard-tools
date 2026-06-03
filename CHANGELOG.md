@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `_needs_local_sync` now filters to actionable statuses only (`pending_local`, `pending_remote`, `conflict`)
 - `get_bookmarks_by_tag` uses subquery instead of redundant join
 
+### Removed
+- Removed obsolete standalone database migration helpers and unused row converters from the documented database surface
+
 ## [0.1.9] - 2025-06-19
 
 ### Added
