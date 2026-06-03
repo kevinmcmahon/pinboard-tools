@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Repaired FTS5 maintenance triggers for the external-content bookmark search index
+- Added a schema version 3 migration that rebuilds `bookmarks_fts` for existing databases
+- Made schema initialization idempotent for triggers, views, and schema version insertion
+
+### Added
+- `pinboard_tools.sync.decisions` module for pure remote-to-local sync conflict classification
+- ADRs documenting FTS-backed search, local mirror persistence, sync decisions, and idempotent schema initialization
+
+### Changed
+- `search_bookmarks` now queries `bookmarks_fts` instead of scanning bookmark text with `LIKE`
+- Bookmark search normalizes raw user input into a parameterized FTS query with a quoted-literal fallback
+- Extracted local mirror bookmark persistence SQL into private helper functions
+- `BidirectionalSync` now delegates remote-to-local decision logic to the sync decisions module
+
+## [0.1.10] - 2026-06-03
+
+### Fixed
 - **CRITICAL**: Fixed deadlock in `get_session()` → `init_database()` caused by non-reentrant `threading.Lock` double-acquisition
 - **HIGH**: Fixed `sync_metadata` table in `schema.sql` missing `IF NOT EXISTS`, causing crash on restart after a partially-failed migration
 - **MEDIUM**: Fixed `_needs_local_sync` counting error'd bookmarks as needing sync, triggering unnecessary API calls

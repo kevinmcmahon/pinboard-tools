@@ -77,9 +77,7 @@ def _classify_pending_local(
     return DecisionAction.APPLY_REMOTE
 
 
-def _remote_is_newer(
-    local: LocalBookmarkSnapshot, remote: Mapping[str, Any]
-) -> bool:
+def _remote_is_newer(local: LocalBookmarkSnapshot, remote: Mapping[str, Any]) -> bool:
     local_time = _coerce_datetime(local.updated_at)
     if local_time is None:
         return False

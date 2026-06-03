@@ -221,9 +221,7 @@ class BidirectionalSync:
         for post in remote_posts:
             hash_value = post["hash"]
             local = local_bookmarks.get(hash_value)
-            decision = self._classify_remote_post(
-                local, post, conflict_resolution
-            )
+            decision = self._classify_remote_post(local, post, conflict_resolution)
 
             if local is not None:
                 if local["sync_status"] == "pending_local":
@@ -281,7 +279,9 @@ class BidirectionalSync:
     ) -> bool:
         """Check if a remote bookmark has changes that need to be applied locally"""
         return bool(
-            self._classify_remote_post(local, remote, ConflictResolution.REMOTE_WINS).action
+            self._classify_remote_post(
+                local, remote, ConflictResolution.REMOTE_WINS
+            ).action
             == DecisionAction.APPLY_REMOTE
         )
 
@@ -297,9 +297,7 @@ class BidirectionalSync:
             conflict_policy=_to_decision_policy(conflict_resolution),
         )
 
-    def _snapshot_local_bookmark(
-        self, local: dict[str, Any]
-    ) -> LocalBookmarkSnapshot:
+    def _snapshot_local_bookmark(self, local: dict[str, Any]) -> LocalBookmarkSnapshot:
         return LocalBookmarkSnapshot(
             href=local["href"],
             description=local["description"],
