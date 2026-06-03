@@ -9,6 +9,7 @@ on:
         default: 'patch'
         type: choice
         options:
+          - none
           - patch
           - minor
           - major
@@ -60,9 +61,16 @@ jobs:
         run: |
           echo "version=$(bump-my-version show current_version)" >> "$GITHUB_OUTPUT"
 
-      - name: Bump version
+      - name: Resolve release version
         id: bump
         run: |
+          if [ "${{ github.event.inputs.version_bump }}" = "none" ]; then
+            NEW_VERSION="${{ steps.current.outputs.version }}"
+            echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+            echo "Releasing existing version $NEW_VERSION"
+            exit 0
+          fi
+
           # Configure git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -79,6 +87,7 @@ jobs:
           git commit -m "chore: bump version from ${{ steps.current.outputs.version }} to $NEW_VERSION"
 
       - name: Push changes
+        if: ${{ github.event.inputs.version_bump != 'none' }}
         run: |
           git push origin main
 
