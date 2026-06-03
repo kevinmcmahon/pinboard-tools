@@ -7,6 +7,9 @@ The sync module provides functionality for bidirectional synchronization between
 BidirectionalSync
 =================
 
+Remote posts are mirrored into the local database through the local mirror module,
+which reuses the same ``upsert_pinboard_post`` path as direct API imports.
+
 .. autoclass:: pinboard_tools.sync.bidirectional.BidirectionalSync
    :members:
    :undoc-members:

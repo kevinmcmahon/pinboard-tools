@@ -27,6 +27,7 @@ Perform an efficient incremental bidirectional sync. The sync engine automatical
 
 - Checks for remote changes using ``get_last_update()`` API call
 - Only fetches bookmarks changed since last sync (using ``fromdt`` parameter)
+- Mirrors remote bookmarks into the local database through the shared ``upsert_pinboard_post`` path
 - Skips sync entirely if no changes exist
 - Reports accurate change counts (not total bookmark collection size)
 

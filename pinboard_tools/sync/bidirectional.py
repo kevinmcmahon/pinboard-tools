@@ -9,9 +9,9 @@ from ..database.models import (
     Database,
     get_bookmark_tags_string,
     get_sync_metadata,
-    set_bookmark_tags,
     set_sync_metadata,
 )
+from ..local_mirror import upsert_pinboard_post
 from ..utils.datetime import parse_boolean, parse_pinboard_time
 from .api import PinboardAPI
 
@@ -228,41 +228,30 @@ class BidirectionalSync:
             remote_posts = self.api.get_all_posts()
 
         # Build lookup of local bookmarks by hash
-        cursor = self.db.execute(
-            "SELECT hash, id, updated_at, sync_status FROM bookmarks"
-        )
+        cursor = self.db.execute("SELECT * FROM bookmarks")
         local_bookmarks = {row["hash"]: dict(row) for row in cursor}
 
-        # Enter sync context to prevent triggers from marking bookmarks as pending
-        if not dry_run:
-            self.db.enter_sync_context()
+        for post in remote_posts:
+            hash_value = post["hash"]
 
-        try:
-            for post in remote_posts:
-                hash_value = post["hash"]
-
-                if hash_value in local_bookmarks:
-                    # Check if we need to update
-                    local = local_bookmarks[hash_value]
-                    if local["sync_status"] == "pending_local":
-                        # Conflict!
-                        self._handle_conflict(local, post, conflict_resolution, dry_run)
-                    else:
-                        # Check if the remote bookmark has actually changed
-                        if self._bookmark_needs_update(local, post):
-                            # Update local with remote changes
-                            if not dry_run:
-                                self._update_bookmark_from_remote(post)
-                            self.sync_stats["remote_to_local"] += 1
+            if hash_value in local_bookmarks:
+                # Check if we need to update
+                local = local_bookmarks[hash_value]
+                if local["sync_status"] == "pending_local":
+                    # Conflict!
+                    self._handle_conflict(local, post, conflict_resolution, dry_run)
                 else:
-                    # New bookmark from remote
-                    if not dry_run:
-                        self._insert_bookmark_from_remote(post)
-                    self.sync_stats["remote_to_local"] += 1
-        finally:
-            # Always exit sync context
-            if not dry_run:
-                self.db.exit_sync_context()
+                    # Check if the remote bookmark has actually changed
+                    if self._bookmark_needs_update(local, post):
+                        # Update local with remote changes
+                        if not dry_run:
+                            upsert_pinboard_post(self.db, post)
+                        self.sync_stats["remote_to_local"] += 1
+            else:
+                # New bookmark from remote
+                if not dry_run:
+                    upsert_pinboard_post(self.db, post)
+                self.sync_stats["remote_to_local"] += 1
 
     def _handle_conflict(
         self,
@@ -291,7 +280,7 @@ class BidirectionalSync:
         elif resolution == ConflictResolution.REMOTE_WINS:
             print("  -> Using remote version")
             if not dry_run:
-                self._update_bookmark_from_remote(remote)
+                upsert_pinboard_post(self.db, remote)
         elif resolution == ConflictResolution.NEWEST_WINS:
             # Compare timestamps
             local_time = datetime.fromisoformat(local["updated_at"])
@@ -307,76 +296,9 @@ class BidirectionalSync:
             else:
                 print(f"  -> Remote is newer ({remote_time} > {local_time})")
                 if not dry_run:
-                    self._update_bookmark_from_remote(remote)
+                    upsert_pinboard_post(self.db, remote)
 
         self.sync_stats["conflicts_resolved"] += 1
-
-    def _update_bookmark_from_remote(self, post: dict[str, Any]) -> None:
-        """Update local bookmark with remote data"""
-        self.db.execute(
-            """
-            UPDATE bookmarks
-            SET href = ?, description = ?, extended = ?,
-                time = ?, toread = ?, shared = ?, meta = ?,
-                sync_status = 'synced', last_synced_at = ?
-            WHERE hash = ?
-        """,
-            (
-                post["href"],
-                post["description"],
-                post.get("extended", ""),
-                post["time"],
-                parse_boolean(post.get("toread", "no")),
-                parse_boolean(post.get("shared", "yes")),
-                post.get("meta", ""),
-                datetime.now(UTC).isoformat(),
-                post["hash"],
-            ),
-        )
-
-        # Update tags using normalized approach
-        self._update_bookmark_tags(post["hash"], post.get("tags", ""))
-
-    def _insert_bookmark_from_remote(self, post: dict[str, Any]) -> None:
-        """Insert new bookmark from remote"""
-        self.db.execute(
-            """
-            INSERT INTO bookmarks (hash, href, description, extended, meta, time, toread, shared, sync_status, last_synced_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?)
-        """,
-            (
-                post["hash"],
-                post["href"],
-                post["description"],
-                post.get("extended", ""),
-                post.get("meta", ""),
-                post["time"],
-                parse_boolean(post.get("toread", "no")),
-                parse_boolean(post.get("shared", "yes")),
-                datetime.now(UTC).isoformat(),
-            ),
-        )
-
-        # Update tags using normalized approach
-        self._update_bookmark_tags(post["hash"], post.get("tags", ""))
-
-    def _update_bookmark_tags(self, bookmark_hash: str, tags_str: str) -> None:
-        """Update bookmark tags in normalized tables"""
-        # Get bookmark ID
-        cursor = self.db.execute(
-            "SELECT id FROM bookmarks WHERE hash = ?", (bookmark_hash,)
-        )
-        row = cursor.fetchone()
-        if not row:
-            return
-
-        bookmark_id = row["id"]
-
-        # Parse tags from string
-        tags = [tag.strip() for tag in tags_str.split()] if tags_str else []
-
-        # Use utility function to set tags
-        set_bookmark_tags(self.db, bookmark_id, tags)
 
     def _bookmark_needs_update(
         self, local: dict[str, Any], remote: dict[str, Any]

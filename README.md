@@ -60,7 +60,7 @@ print(f"Conflicts resolved: {stats['conflicts_resolved']}")
 ### Sync Engine
 
 - `PinboardAPI` - API client with rate limiting, exponential backoff, and JSON error handling
-- `BidirectionalSync` - Efficient incremental sync with conflict resolution and error recovery
+- `BidirectionalSync` - Efficient incremental sync with conflict resolution, error recovery, and remote-to-local mirroring through `upsert_pinboard_post`
 - `upsert_pinboard_post` - Mirror a Pinboard API post into the local database
 
 ### Tag Analysis

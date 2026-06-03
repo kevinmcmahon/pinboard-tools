@@ -23,43 +23,72 @@ def upsert_pinboard_post(db: Database, post: Mapping[str, Any]) -> Bookmark:
 
     db.enter_sync_context()
     try:
-        db.execute(
-            """
-            INSERT INTO bookmarks (
-                hash, href, description, extended, meta, time,
-                shared, toread, sync_status, last_synced_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?)
-            ON CONFLICT(href) DO UPDATE SET
-                hash = excluded.hash,
-                description = excluded.description,
-                extended = excluded.extended,
-                meta = excluded.meta,
-                time = excluded.time,
-                shared = excluded.shared,
-                toread = excluded.toread,
-                sync_status = 'synced',
-                last_synced_at = excluded.last_synced_at
-            """,
-            (
-                remote["hash"],
-                remote["href"],
-                remote["description"],
-                remote.get("extended", ""),
-                remote.get("meta", ""),
-                remote["time"],
-                parse_boolean(remote.get("shared", "yes")),
-                parse_boolean(remote.get("toread", "no")),
-                synced_at,
-            ),
-        )
-
         row = db.execute(
-            "SELECT id FROM bookmarks WHERE href = ?", (remote["href"],)
+            "SELECT id, created_at FROM bookmarks WHERE hash = ?", (remote["hash"],)
         ).fetchone()
         if row is None:
-            raise InvalidPinboardPostError(
-                f"Mirrored bookmark could not be found: {remote['href']}"
+            row = db.execute(
+                "SELECT id, created_at FROM bookmarks WHERE href = ?", (remote["href"],)
+            ).fetchone()
+
+        if row is None:
+            db.execute(
+                """
+                INSERT INTO bookmarks (
+                    hash, href, description, extended, meta, time,
+                    shared, toread, sync_status, last_synced_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?)
+                """,
+                (
+                    remote["hash"],
+                    remote["href"],
+                    remote["description"],
+                    remote.get("extended", ""),
+                    remote.get("meta", ""),
+                    remote["time"],
+                    parse_boolean(remote.get("shared", "yes")),
+                    parse_boolean(remote.get("toread", "no")),
+                    synced_at,
+                ),
+            )
+            row = db.execute(
+                "SELECT id, created_at FROM bookmarks WHERE href = ?", (remote["href"],)
+            ).fetchone()
+            if row is None:
+                raise InvalidPinboardPostError(
+                    f"Mirrored bookmark could not be found: {remote['href']}"
+                )
+        else:
+            bookmark_id = int(row["id"])
+            db.execute(
+                """
+                DELETE FROM bookmarks
+                WHERE id = ?
+                """,
+                (bookmark_id,),
+            )
+            db.execute(
+                """
+                INSERT INTO bookmarks (
+                    id, hash, href, description, extended, meta, time,
+                    shared, toread, sync_status, last_synced_at, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, ?)
+                """,
+                (
+                    bookmark_id,
+                    remote["hash"],
+                    remote["href"],
+                    remote["description"],
+                    remote.get("extended", ""),
+                    remote.get("meta", ""),
+                    remote["time"],
+                    parse_boolean(remote.get("shared", "yes")),
+                    parse_boolean(remote.get("toread", "no")),
+                    synced_at,
+                    row["created_at"],
+                ),
             )
 
         bookmark_id = int(row["id"])
@@ -76,11 +105,14 @@ def upsert_pinboard_post(db: Database, post: Mapping[str, Any]) -> Bookmark:
             (synced_at, bookmark_id),
         )
         db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.exit_sync_context()
 
     mirrored = db.execute(
-        "SELECT * FROM bookmarks_with_tags WHERE href = ?", (remote["href"],)
+        "SELECT * FROM bookmarks_with_tags WHERE id = ?", (bookmark_id,)
     ).fetchone()
     if mirrored is None:
         raise InvalidPinboardPostError(
