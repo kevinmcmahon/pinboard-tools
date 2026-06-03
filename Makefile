@@ -1,7 +1,7 @@
 # ABOUTME: Makefile for pinboard-tools project with development tasks
 # ABOUTME: Provides standard targets for testing, linting, formatting, and project management
 
-.PHONY: help install install-dev clean test test-cov lint format format-imports typecheck check all docs docs-llm docs-clean release-patch release-minor release-major release-retry release-status
+.PHONY: help install install-dev clean test test-cov lint format format-imports typecheck check all docs docs-llm docs-clean release release-retry release-status
 .DEFAULT_GOAL := help
 
 # Variables
@@ -81,14 +81,16 @@ build: ## Build distribution packages
 	$(UV) build
 
 # Release targets
-release-patch: ## Trigger GitHub Actions patch release
-	gh workflow run publish.yml --ref main -f version_bump=patch -f prerelease=false
-
-release-minor: ## Trigger GitHub Actions minor release
-	gh workflow run publish.yml --ref main -f version_bump=minor -f prerelease=false
-
-release-major: ## Trigger GitHub Actions major release
-	gh workflow run publish.yml --ref main -f version_bump=major -f prerelease=false
+release: ## Trigger GitHub Actions release (usage: make release LEVEL=patch|minor|major)
+	@if [ -z "$(LEVEL)" ]; then \
+		echo "Usage: make release LEVEL=patch|minor|major"; \
+		exit 2; \
+	fi
+	@case "$(LEVEL)" in \
+		patch|minor|major) ;; \
+		*) echo "Invalid LEVEL=$(LEVEL). Use patch, minor, or major."; exit 2 ;; \
+	esac
+	gh workflow run publish.yml --ref main -f version_bump=$(LEVEL) -f prerelease=false
 
 release-retry: ## Retry publishing current version without bumping
 	gh workflow run publish.yml --ref main -f version_bump=none -f prerelease=false
