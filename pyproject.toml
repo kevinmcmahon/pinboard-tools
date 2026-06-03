@@ -36,10 +36,15 @@ packages = ["pinboard_tools"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "pinboard_tools/",
-    "tests/",
-    "README.md",
-    "LICENSE",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/README.md",
+    "/RELEASING.md",
+    "/docs",
+    "/pinboard_tools",
+    "/pyproject.toml",
+    "/tests",
+    "/uv.lock",
 ]
 
 [tool.ruff]
