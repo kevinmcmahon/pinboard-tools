@@ -3,7 +3,7 @@
 
 """A Python library for syncing and managing Pinboard bookmarks."""
 
-__version__ = "0.1.10"
+__version__ = "0.1.11"
 
 from .analysis.consolidation import TagConsolidator
 
