@@ -1,6 +1,8 @@
 # ABOUTME: Common database queries and statistics functions
 # ABOUTME: Provides reusable queries for bookmarks and tags
 
+import re
+import sqlite3
 from typing import Any
 
 from .models import Database
@@ -107,18 +109,38 @@ def get_modified_bookmarks(
     return [dict(row) for row in cursor]
 
 
+def _quote_fts_token(token: str) -> str:
+    """Quote a token as literal FTS text."""
+    escaped_token = token.replace('"', '""')
+    return f'"{escaped_token}"'
+
+
+def _fts_query_from_user_text(query: str) -> str:
+    """Convert raw user input into a safe FTS query."""
+    tokens = re.findall(r"\w+", query)
+    if not tokens:
+        return _quote_fts_token(query)
+    return " OR ".join(_quote_fts_token(token) for token in tokens)
+
+
 def search_bookmarks(db: Database, query: str) -> list[dict[str, Any]]:
-    """Search bookmarks by description or URL"""
-    search_term = f"%{query}%"
-    cursor = db.execute(
-        """
-        SELECT hash, href, description, time, tags
-        FROM bookmarks_with_tags
-        WHERE description LIKE ? OR href LIKE ? OR extended LIKE ?
-        ORDER BY time DESC
-    """,
-        (search_term, search_term, search_term),
-    )
+    """Search bookmarks by description, URL, or extended text."""
+    if not query.strip():
+        return []
+
+    sql = """
+        SELECT bwt.hash, bwt.href, bwt.description, bwt.time, bwt.tags
+        FROM bookmarks_fts fts
+        JOIN bookmarks_with_tags bwt ON bwt.id = fts.rowid
+        WHERE bookmarks_fts MATCH ?
+        ORDER BY bwt.time DESC
+    """
+
+    try:
+        cursor = db.execute(sql, (_fts_query_from_user_text(query),))
+    except sqlite3.OperationalError:
+        cursor = db.execute(sql, (_quote_fts_token(query),))
+
     return [dict(row) for row in cursor]
 
 

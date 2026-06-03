@@ -75,34 +75,34 @@ CREATE VIRTUAL TABLE IF NOT EXISTS bookmarks_fts USING fts5(
 );
 
 -- Triggers to keep FTS index in sync
-CREATE TRIGGER bookmarks_fts_insert AFTER INSERT ON bookmarks
+CREATE TRIGGER IF NOT EXISTS bookmarks_fts_insert AFTER INSERT ON bookmarks
 BEGIN
     INSERT INTO bookmarks_fts(rowid, href, description, extended)
     VALUES (new.id, new.href, new.description, new.extended);
 END;
 
-CREATE TRIGGER bookmarks_fts_update AFTER UPDATE ON bookmarks
+CREATE TRIGGER IF NOT EXISTS bookmarks_fts_update AFTER UPDATE ON bookmarks
 BEGIN
-    UPDATE bookmarks_fts 
-    SET href = new.href,
-        description = new.description,
-        extended = new.extended
-    WHERE rowid = new.id;
+    INSERT INTO bookmarks_fts(bookmarks_fts, rowid, href, description, extended)
+    VALUES ('delete', old.id, old.href, old.description, old.extended);
+    INSERT INTO bookmarks_fts(rowid, href, description, extended)
+    VALUES (new.id, new.href, new.description, new.extended);
 END;
 
-CREATE TRIGGER bookmarks_fts_delete AFTER DELETE ON bookmarks
+CREATE TRIGGER IF NOT EXISTS bookmarks_fts_delete AFTER DELETE ON bookmarks
 BEGIN
-    DELETE FROM bookmarks_fts WHERE rowid = old.id;
+    INSERT INTO bookmarks_fts(bookmarks_fts, rowid, href, description, extended)
+    VALUES ('delete', old.id, old.href, old.description, old.extended);
 END;
 
 -- Update timestamp trigger
-CREATE TRIGGER bookmarks_update_timestamp AFTER UPDATE ON bookmarks
+CREATE TRIGGER IF NOT EXISTS bookmarks_update_timestamp AFTER UPDATE ON bookmarks
 BEGIN
     UPDATE bookmarks SET updated_at = CURRENT_TIMESTAMP WHERE id = new.id;
 END;
 
 -- View for convenient bookmark querying with tags
-CREATE VIEW bookmarks_with_tags AS
+CREATE VIEW IF NOT EXISTS bookmarks_with_tags AS
 SELECT 
     b.id,
     b.href,
@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS sync_metadata (
 );
 
 -- Triggers to track tag modifications for sync (only when not during sync)
-CREATE TRIGGER track_tag_insertions
+CREATE TRIGGER IF NOT EXISTS track_tag_insertions
 AFTER INSERT ON bookmark_tags
 FOR EACH ROW
 WHEN NOT EXISTS (SELECT 1 FROM sync_context WHERE key = 'in_sync')
@@ -152,7 +152,7 @@ BEGIN
     AND sync_status = 'synced';
 END;
 
-CREATE TRIGGER track_tag_deletions
+CREATE TRIGGER IF NOT EXISTS track_tag_deletions
 AFTER DELETE ON bookmark_tags
 FOR EACH ROW
 WHEN NOT EXISTS (SELECT 1 FROM sync_context WHERE key = 'in_sync')
@@ -165,4 +165,6 @@ BEGIN
 END;
 
 -- Initialize schema version (only for new databases)
-INSERT OR IGNORE INTO schema_version (version) VALUES (2);
+INSERT INTO schema_version (version)
+SELECT 3
+WHERE NOT EXISTS (SELECT 1 FROM schema_version);

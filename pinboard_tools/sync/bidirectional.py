@@ -11,9 +11,25 @@ from ..database.models import (
     get_sync_metadata,
     set_sync_metadata,
 )
-from ..local_mirror import upsert_pinboard_post
-from ..utils.datetime import parse_boolean, parse_pinboard_time
+from ..local_mirror import (
+    _count_actionable_local_bookmarks,
+    _fetch_local_bookmarks_by_hash,
+    _fetch_pending_local_bookmarks,
+    _mark_bookmark_pending_local,
+    _mark_bookmarks_error,
+    _mark_bookmarks_synced,
+    _retry_error_bookmarks,
+    _touch_synced_bookmarks,
+    upsert_pinboard_post,
+)
 from .api import PinboardAPI
+from .decisions import (
+    DecisionAction,
+    LocalBookmarkSnapshot,
+    SyncConflictPolicy,
+    SyncDecision,
+    classify_remote_post,
+)
 
 
 class SyncDirection(Enum):
@@ -94,16 +110,9 @@ class BidirectionalSync:
 
         Returns the number of bookmarks reset.
         """
-        cursor = self.db.execute(
-            "SELECT COUNT(*) as count FROM bookmarks WHERE sync_status = 'error'"
-        )
-        count: int = cursor.fetchone()["count"]
+        count = _retry_error_bookmarks(self.db)
 
         if count > 0:
-            self.db.execute(
-                "UPDATE bookmarks SET sync_status = 'pending_local' WHERE sync_status = 'error'"
-            )
-            self.db.commit()
             print(f"Reset {count} error'd bookmarks to pending_local for retry")
 
         return count
@@ -111,10 +120,7 @@ class BidirectionalSync:
     def _needs_local_sync(self) -> bool:
         """Check if local changes need to be synced to remote"""
         # Only count actionable statuses, not 'error' (which requires explicit retry)
-        cursor = self.db.execute(
-            "SELECT COUNT(*) as count FROM bookmarks WHERE sync_status IN ('pending_local', 'pending_remote', 'conflict')"
-        )
-        local_changes = cursor.fetchone()["count"]
+        local_changes = _count_actionable_local_bookmarks(self.db)
         if local_changes > 0:
             print(f"Found {local_changes} local changes to sync")
             return True
@@ -141,32 +147,17 @@ class BidirectionalSync:
 
     def _mark_bookmarks_synced(self, bookmark_ids: list[int]) -> None:
         """Mark bookmarks as synced in the database"""
-        if not bookmark_ids:
-            return
-        now_iso = datetime.now(UTC).isoformat()
-        for bookmark_id in bookmark_ids:
-            self.db.execute(
-                "UPDATE bookmarks SET sync_status = 'synced', last_synced_at = ? WHERE id = ?",
-                (now_iso, bookmark_id),
-            )
+        _mark_bookmarks_synced(self.db, bookmark_ids)
 
     def _mark_bookmarks_error(
         self, bookmarks: list[dict[str, Any]], exclude_ids: list[int]
     ) -> None:
         """Mark bookmarks as error, excluding already-synced ones"""
-        for bookmark in bookmarks:
-            if bookmark["id"] not in exclude_ids:
-                self.db.execute(
-                    "UPDATE bookmarks SET sync_status = 'error' WHERE id = ?",
-                    (bookmark["id"],),
-                )
+        _mark_bookmarks_error(self.db, bookmarks, exclude_ids)
 
     def _sync_local_to_remote(self, dry_run: bool) -> None:
         """Sync local changes to Pinboard"""
-        cursor = self.db.execute(
-            "SELECT * FROM bookmarks WHERE sync_status = 'pending_local'"
-        )
-        bookmarks = [dict(row) for row in cursor]
+        bookmarks = _fetch_pending_local_bookmarks(self.db)
 
         if dry_run:
             for bookmark in bookmarks:
@@ -195,10 +186,7 @@ class BidirectionalSync:
                     self.sync_stats["local_to_remote"] += 1
                 else:
                     print(f"Failed to sync bookmark {bookmark['href']}")
-                    self.db.execute(
-                        "UPDATE bookmarks SET sync_status = 'error' WHERE id = ?",
-                        (bookmark["id"],),
-                    )
+                    _mark_bookmarks_error(self.db, [bookmark], [])
                     self.db.commit()
                     self.sync_stats["errors"] += 1
 
@@ -228,21 +216,24 @@ class BidirectionalSync:
             remote_posts = self.api.get_all_posts()
 
         # Build lookup of local bookmarks by hash
-        cursor = self.db.execute("SELECT * FROM bookmarks")
-        local_bookmarks = {row["hash"]: dict(row) for row in cursor}
+        local_bookmarks = _fetch_local_bookmarks_by_hash(self.db)
 
         for post in remote_posts:
             hash_value = post["hash"]
+            local = local_bookmarks.get(hash_value)
+            decision = self._classify_remote_post(
+                local, post, conflict_resolution
+            )
 
-            if hash_value in local_bookmarks:
-                # Check if we need to update
-                local = local_bookmarks[hash_value]
+            if local is not None:
                 if local["sync_status"] == "pending_local":
                     # Conflict!
-                    self._handle_conflict(local, post, conflict_resolution, dry_run)
+                    self._handle_conflict(
+                        local, post, conflict_resolution, dry_run, decision.action
+                    )
                 else:
                     # Check if the remote bookmark has actually changed
-                    if self._bookmark_needs_update(local, post):
+                    if decision.action == DecisionAction.APPLY_REMOTE:
                         # Update local with remote changes
                         if not dry_run:
                             upsert_pinboard_post(self.db, post)
@@ -259,6 +250,7 @@ class BidirectionalSync:
         remote: dict[str, Any],
         resolution: ConflictResolution,
         dry_run: bool,
+        action: DecisionAction | None = None,
     ) -> None:
         """Handle sync conflicts"""
         self.conflict_count += 1
@@ -269,34 +261,18 @@ class BidirectionalSync:
             print("Manual conflict resolution not implemented - using newest wins")
             resolution = ConflictResolution.NEWEST_WINS
 
-        if resolution == ConflictResolution.LOCAL_WINS:
+        if action is None:
+            action = self._classify_remote_post(local, remote, resolution).action
+
+        if action == DecisionAction.KEEP_LOCAL:
             print("  -> Keeping local version")
             # Mark for upload to remote
             if not dry_run:
-                self.db.execute(
-                    "UPDATE bookmarks SET sync_status = 'pending_local' WHERE id = ?",
-                    (local["id"],),
-                )
-        elif resolution == ConflictResolution.REMOTE_WINS:
+                _mark_bookmark_pending_local(self.db, local["id"])
+        elif action == DecisionAction.APPLY_REMOTE:
             print("  -> Using remote version")
             if not dry_run:
                 upsert_pinboard_post(self.db, remote)
-        elif resolution == ConflictResolution.NEWEST_WINS:
-            # Compare timestamps
-            local_time = datetime.fromisoformat(local["updated_at"])
-            remote_time = parse_pinboard_time(remote["time"])
-
-            if local_time > remote_time:
-                print(f"  -> Local is newer ({local_time} > {remote_time})")
-                if not dry_run:
-                    self.db.execute(
-                        "UPDATE bookmarks SET sync_status = 'pending_local' WHERE id = ?",
-                        (local["id"],),
-                    )
-            else:
-                print(f"  -> Remote is newer ({remote_time} > {local_time})")
-                if not dry_run:
-                    upsert_pinboard_post(self.db, remote)
 
         self.sync_stats["conflicts_resolved"] += 1
 
@@ -304,53 +280,52 @@ class BidirectionalSync:
         self, local: dict[str, Any], remote: dict[str, Any]
     ) -> bool:
         """Check if a remote bookmark has changes that need to be applied locally"""
-        # Compare key fields to see if they differ
-        remote_time = parse_pinboard_time(remote["time"])
-        local_time = None
-        if local.get("updated_at"):
-            local_time = datetime.fromisoformat(local["updated_at"])
-            # Ensure both datetimes have timezone info for comparison
-            if local_time.tzinfo is None:
-                local_time = local_time.replace(tzinfo=UTC)
+        return bool(
+            self._classify_remote_post(local, remote, ConflictResolution.REMOTE_WINS).action
+            == DecisionAction.APPLY_REMOTE
+        )
 
-        # If remote is newer, it needs updating
-        if local_time and remote_time > local_time:
-            return True
+    def _classify_remote_post(
+        self,
+        local: dict[str, Any] | None,
+        remote: dict[str, Any],
+        conflict_resolution: ConflictResolution,
+    ) -> SyncDecision:
+        return classify_remote_post(
+            local=self._snapshot_local_bookmark(local) if local is not None else None,
+            remote=remote,
+            conflict_policy=_to_decision_policy(conflict_resolution),
+        )
 
-        # Check if basic fields differ
-        if (
-            remote.get("href") != local.get("href")
-            or remote.get("description") != local.get("description")
-            or remote.get("extended", "") != local.get("extended", "")
-            or parse_boolean(remote.get("shared", "yes"))
-            != bool(local.get("shared", True))
-            or parse_boolean(remote.get("toread", "no"))
-            != bool(local.get("toread", False))
-        ):
-            return True
-
-        # Get local tags and compare with remote tags
-        local_tags = get_bookmark_tags_string(self.db, local["id"])
-        remote_tags = remote.get("tags", "")
-
-        # Normalize tag strings for comparison (split, sort, rejoin)
-        local_tags_normalized = " ".join(sorted(local_tags.split()))
-        remote_tags_normalized = " ".join(sorted(remote_tags.split()))
-
-        return local_tags_normalized != remote_tags_normalized
+    def _snapshot_local_bookmark(
+        self, local: dict[str, Any]
+    ) -> LocalBookmarkSnapshot:
+        return LocalBookmarkSnapshot(
+            href=local["href"],
+            description=local["description"],
+            extended=local.get("extended"),
+            shared=bool(local.get("shared", True)),
+            toread=bool(local.get("toread", False)),
+            tags=get_bookmark_tags_string(self.db, local["id"]).split(),
+            sync_status=local.get("sync_status", "synced"),
+            updated_at=local.get("updated_at"),
+        )
 
     def _update_sync_timestamps(self) -> None:
         """Update last sync timestamp for all synced bookmarks and sync metadata"""
         now = datetime.now(UTC)
-        now_iso = now.isoformat()
-
-        self.db.execute(
-            "UPDATE bookmarks SET last_synced_at = ? WHERE sync_status = 'synced'",
-            (now_iso,),
-        )
+        _touch_synced_bookmarks(self.db, now)
 
         # Update sync metadata to record successful remote sync
         if self.sync_stats["remote_to_local"] > 0:
             set_sync_metadata(self.db, "last_remote_sync", now)
 
         self.db.commit()
+
+
+def _to_decision_policy(resolution: ConflictResolution) -> SyncConflictPolicy:
+    if resolution == ConflictResolution.LOCAL_WINS:
+        return SyncConflictPolicy.LOCAL_WINS
+    if resolution == ConflictResolution.REMOTE_WINS:
+        return SyncConflictPolicy.REMOTE_WINS
+    return SyncConflictPolicy.NEWEST_WINS

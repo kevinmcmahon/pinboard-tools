@@ -180,7 +180,7 @@ class Database:
     def _apply_migrations(self, conn: sqlite3.Connection) -> None:
         """Apply database migrations based on current version"""
         current_version = self._get_schema_version(conn)
-        target_version = 2  # Current schema version
+        target_version = 3  # Current schema version
 
         if current_version >= target_version:
             return  # Already up to date
@@ -224,12 +224,51 @@ class Database:
                 current_version = 2
                 print("Migration to version 2 complete")
 
+            # Migration from version 2 to 3: Repair FTS maintenance triggers
+            if current_version < 3:
+                print(f"Migrating database from version {current_version} to 3...")
+                self._repair_fts_triggers(conn)
+                conn.execute(
+                    "INSERT INTO bookmarks_fts(bookmarks_fts) VALUES ('rebuild')"
+                )
+                conn.execute("UPDATE schema_version SET version = 3")
+                current_version = 3
+                print("Migration to version 3 complete")
+
         except sqlite3.Error as e:
             print(f"Migration failed from version {current_version}: {e}")
             conn.rollback()
             raise sqlite3.DatabaseError(
                 f"Failed to migrate database from version {current_version}: {e}"
             ) from e
+
+    def _repair_fts_triggers(self, conn: sqlite3.Connection) -> None:
+        """Replace FTS triggers with external-content-safe definitions."""
+        conn.executescript("""
+            DROP TRIGGER IF EXISTS bookmarks_fts_insert;
+            DROP TRIGGER IF EXISTS bookmarks_fts_update;
+            DROP TRIGGER IF EXISTS bookmarks_fts_delete;
+
+            CREATE TRIGGER bookmarks_fts_insert AFTER INSERT ON bookmarks
+            BEGIN
+                INSERT INTO bookmarks_fts(rowid, href, description, extended)
+                VALUES (new.id, new.href, new.description, new.extended);
+            END;
+
+            CREATE TRIGGER bookmarks_fts_update AFTER UPDATE ON bookmarks
+            BEGIN
+                INSERT INTO bookmarks_fts(bookmarks_fts, rowid, href, description, extended)
+                VALUES ('delete', old.id, old.href, old.description, old.extended);
+                INSERT INTO bookmarks_fts(rowid, href, description, extended)
+                VALUES (new.id, new.href, new.description, new.extended);
+            END;
+
+            CREATE TRIGGER bookmarks_fts_delete AFTER DELETE ON bookmarks
+            BEGIN
+                INSERT INTO bookmarks_fts(bookmarks_fts, rowid, href, description, extended)
+                VALUES ('delete', old.id, old.href, old.description, old.extended);
+            END;
+        """)
 
     def execute(self, query: str, params: tuple[object, ...] = ()) -> sqlite3.Cursor:
         """Execute a query and return cursor"""
