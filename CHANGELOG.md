@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-06-03
+
 ### Fixed
 - Repaired FTS5 maintenance triggers for the external-content bookmark search index
 - Added a schema version 3 migration that rebuilds `bookmarks_fts` for existing databases
