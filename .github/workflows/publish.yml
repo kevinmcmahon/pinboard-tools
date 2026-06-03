@@ -83,16 +83,61 @@ jobs:
           echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
           # Commit changes
-          git add pyproject.toml pinboard_tools/__init__.py docs/conf.py
+          git add pyproject.toml pinboard_tools/__init__.py docs/conf.py uv.lock
           git commit -m "chore: bump version from ${{ steps.current.outputs.version }} to $NEW_VERSION"
+
+      - name: Check release target availability
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          version = os.environ["NEW_VERSION"]
+          url = f"https://pypi.org/pypi/pinboard-tools/{version}/json"
+
+          try:
+              urllib.request.urlopen(url, timeout=10)
+          except urllib.error.HTTPError as error:
+              if error.code == 404:
+                  print(f"PyPI version {version} is available")
+                  sys.exit(0)
+              raise
+          else:
+              print(f"PyPI version {version} already exists: {url}")
+              sys.exit(1)
+          PY
+
+          if gh release view "v$NEW_VERSION" >/dev/null 2>&1; then
+            echo "GitHub release v$NEW_VERSION already exists"
+            exit 1
+          fi
+          echo "GitHub release v$NEW_VERSION is available"
+
+      - name: Install project dependencies
+        run: uv sync --all-extras
+
+      - name: Run release checks
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy pinboard_tools/
+          uv run pytest --cov=pinboard_tools --cov-report=term-missing
+
+      - name: Build package
+        run: uv build
+
+      - name: Check package metadata
+        run: uv run --with twine twine check dist/*
 
       - name: Push changes
         if: ${{ github.event.inputs.version_bump != 'none' }}
         run: |
           git push origin main
-
-      - name: Build package
-        run: uv build
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

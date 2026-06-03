@@ -107,6 +107,9 @@ filename = "docs/conf.py"
 search = 'release = "{current_version}"'
 replace = 'release = "{new_version}"'
 
+[[tool.bumpversion.files]]
+filename = "uv.lock"
+
 [dependency-groups]
 dev = [
     "isort>=6.0.1",

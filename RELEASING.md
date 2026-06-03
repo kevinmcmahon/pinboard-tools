@@ -15,7 +15,7 @@ This document describes how to release new versions of `pinboard-tools` to PyPI.
 Use the GitHub Actions workflow to automatically bump version and create a release:
 
 1. Go to the [Actions tab](../../actions) in the repository
-2. Click on "Create Release" workflow
+2. Click on the "Release" workflow (`.github/workflows/publish.yml`)
 3. Click "Run workflow"
 4. Select:
    - **Version bump type**: `patch`, `minor`, or `major`
@@ -24,11 +24,20 @@ Use the GitHub Actions workflow to automatically bump version and create a relea
 
 The workflow will:
 
-- Bump the version in `pyproject.toml` and `pinboard_tools/__init__.py`
-- Commit the version change
+- Bump the version in `pyproject.toml`, `pinboard_tools/__init__.py`, `docs/conf.py`, and `uv.lock`
+- Run linting, formatting, type checking, tests with coverage, package build, and metadata checks
+- Commit and push the version change after local release checks pass
+- Verify the PyPI version and GitHub release do not already exist
+- Publish the package to PyPI using trusted publishing
 - Create a GitHub release with auto-generated release notes
-- Trigger the PyPI publish workflow
 - Upload signed artifacts to the GitHub release
+
+#### Recovery mode
+
+Use **Version bump type** `none` only when the repository has already been
+bumped to the release version but PyPI publishing failed before the package was
+uploaded. This rebuilds and publishes the existing version without creating a
+new version bump commit.
 
 ### Method 2: Manual Release
 
@@ -37,23 +46,20 @@ If you prefer to control the version bump manually:
 1. **Update version locally**:
 
    ```bash
-   # Install bump-my-version if needed
-   pip install bump-my-version
-   
    # Check current version
-   bump-my-version show current_version
+   uv run --with bump-my-version bump-my-version show current_version
    
    # Bump version (choose one)
-   bump-my-version bump patch  # 0.1.1 -> 0.1.2
-   bump-my-version bump minor  # 0.1.1 -> 0.2.0
-   bump-my-version bump major  # 0.1.1 -> 1.0.0
+   uv run --with bump-my-version bump-my-version bump patch  # 0.1.1 -> 0.1.2
+   uv run --with bump-my-version bump-my-version bump minor  # 0.1.1 -> 0.2.0
+   uv run --with bump-my-version bump-my-version bump major  # 0.1.1 -> 1.0.0
    ```
 
 2. **Commit and push**:
 
    ```bash
-   git add pyproject.toml pinboard_tools/__init__.py
-   git commit -m "chore: bump version to $(bump-my-version show current_version)"
+   git add pyproject.toml pinboard_tools/__init__.py docs/conf.py uv.lock
+   GIT_EDITOR=true git commit
    git push origin main
    ```
 
@@ -66,7 +72,8 @@ If you prefer to control the version bump manually:
    - Check "Set as a pre-release" if applicable
    - Click "Publish release"
 
-The release publication will trigger the PyPI publish workflow automatically.
+Manual GitHub release creation does not publish to PyPI. Prefer the automated
+workflow unless you are deliberately handling PyPI publication yourself.
 
 ## Version Numbering
 
@@ -122,6 +129,12 @@ Ensure the PyPI trusted publisher configuration matches exactly:
 Before releasing, test the package build locally:
 
 ```bash
+# Run the same checks used by CI and release
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy pinboard_tools/
+uv run --with pytest-cov pytest --cov=pinboard_tools --cov-report=term-missing
+
 # Build the package
 uv build
 
