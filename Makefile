@@ -1,7 +1,7 @@
 # ABOUTME: Makefile for pinboard-tools project with development tasks
 # ABOUTME: Provides standard targets for testing, linting, formatting, and project management
 
-.PHONY: help install install-dev clean test test-cov lint format format-imports typecheck check all docs docs-llm docs-clean
+.PHONY: help install install-dev clean test test-cov lint format format-imports typecheck check all docs docs-llm docs-clean release-patch release-minor release-major release-retry release-status
 .DEFAULT_GOAL := help
 
 # Variables
@@ -79,6 +79,22 @@ all: clean install-dev check test ## Run complete development workflow
 # Build targets
 build: ## Build distribution packages
 	$(UV) build
+
+# Release targets
+release-patch: ## Trigger GitHub Actions patch release
+	gh workflow run publish.yml --ref main -f version_bump=patch -f prerelease=false
+
+release-minor: ## Trigger GitHub Actions minor release
+	gh workflow run publish.yml --ref main -f version_bump=minor -f prerelease=false
+
+release-major: ## Trigger GitHub Actions major release
+	gh workflow run publish.yml --ref main -f version_bump=major -f prerelease=false
+
+release-retry: ## Retry publishing current version without bumping
+	gh workflow run publish.yml --ref main -f version_bump=none -f prerelease=false
+
+release-status: ## Show recent GitHub Actions runs
+	gh run list --limit 10
 
 # Documentation targets
 docs: ## Build HTML documentation
