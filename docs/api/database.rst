@@ -44,6 +44,13 @@ Database Connection
 
 .. autofunction:: pinboard_tools.database.models.get_session
 
+Local Mirroring
+===============
+
+.. autofunction:: pinboard_tools.local_mirror.upsert_pinboard_post
+
+.. autoexception:: pinboard_tools.local_mirror.InvalidPinboardPostError
+
 Type Definitions
 ================
 

@@ -61,6 +61,7 @@ print(f"Conflicts resolved: {stats['conflicts_resolved']}")
 
 - `PinboardAPI` - API client with rate limiting, exponential backoff, and JSON error handling
 - `BidirectionalSync` - Efficient incremental sync with conflict resolution and error recovery
+- `upsert_pinboard_post` - Mirror a Pinboard API post into the local database
 
 ### Tag Analysis
 
@@ -120,6 +121,33 @@ retried = sync.retry_failed_bookmarks()
 if retried > 0:
     stats = sync.sync()  # re-sync the retried bookmarks
 ```
+
+### Local mirroring
+
+Use `upsert_pinboard_post` when another application has already written a
+bookmark to Pinboard and wants to keep the local SQLite database in step without
+running a full sync:
+
+```python
+from pinboard_tools import PinboardAPI, get_session, init_database, upsert_pinboard_post
+
+init_database("bookmarks.db")
+db = get_session()
+api = PinboardAPI("your-token")
+
+api.add_post(
+    url="https://example.com",
+    description="Example",
+    extended="A useful example.",
+    tags="examples docs",
+)
+posts = api.get_post(url="https://example.com")
+if posts:
+    upsert_pinboard_post(db, posts[0])
+```
+
+The mirrored bookmark is marked `synced`, tags are normalized through the same
+tag tables as sync, and `last_synced_at` is updated.
 
 ### Tag Analysis
 

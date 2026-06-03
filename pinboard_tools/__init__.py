@@ -3,7 +3,7 @@
 
 """A Python library for syncing and managing Pinboard bookmarks."""
 
-__version__ = "0.1.9"
+__version__ = "0.1.10"
 
 from .analysis.consolidation import TagConsolidator
 
@@ -19,6 +19,7 @@ from .database.models import (
     get_session,
     init_database,
 )
+from .local_mirror import InvalidPinboardPostError, upsert_pinboard_post
 
 # Sync functionality
 from .sync.api import PinboardAPI
@@ -34,6 +35,7 @@ __all__ = [
     # Database
     "Bookmark",
     "BookmarkTag",
+    "InvalidPinboardPostError",
     "PinboardAPI",
     "SyncStatus",
     "Tag",
@@ -46,4 +48,5 @@ __all__ = [
     "get_session",
     "init_database",
     "parse_pinboard_time",
+    "upsert_pinboard_post",
 ]
